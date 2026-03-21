@@ -77,7 +77,8 @@ Draft issues are not used — real issues are required so comments work.
   "project": "2",
   "owner": "evilsquid888",
   "ownerType": "user",
-  "repo": "evilsquid888/my-project"
+  "repo": "evilsquid888/my-project",
+  "retries": 2
 }
 ```
 
@@ -198,7 +199,9 @@ If the pipeline is aborted mid-run, the item's Status stays at whatever column i
 
 **Retry limit:**
 
-Each agent is allowed a maximum of **2 rejections per task** before the pipeline pauses for human review — even in `--auto` mode. On the 2nd rejection of the same agent (e.g. Builder rejected twice), the pipeline:
+Configurable via `--retries N` flag (default: `2`). The limit can also be set permanently in `.claude/kanban-gh.json` as `"retries": 3`. Flag takes precedence over config.
+
+Each agent is allowed a maximum of `N` rejections per task before the pipeline pauses for human review — even in `--auto` mode. On the Nth rejection of the same agent (e.g. Builder rejected twice with default), the pipeline:
 1. Posts a comment: `> ⚠️ [kanban-gh] Builder has been rejected 2 times. Pausing for human review.`
 2. Leaves the item at its current Status column.
 3. Exits and waits for the user to intervene (edit requirements or manually advance).
