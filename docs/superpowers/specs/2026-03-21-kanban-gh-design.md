@@ -205,7 +205,7 @@ If the pipeline is aborted mid-run, the item's Status stays at whatever column i
 A structured requirements refinement interview that rewrites the issue body with a complete, actionable specification.
 
 1. Fetch the issue title and current body.
-2. Ask the user 3–5 targeted questions one at a time (using `AskUserQuestion`) to clarify: goal, scope, acceptance criteria, edge cases, constraints.
+2. Ask the user 3–5 targeted questions one at a time (using `AskUserQuestion` — the Claude Code native interactive prompt tool) to clarify: goal, scope, acceptance criteria, edge cases, constraints.
 3. Rewrite the issue body with a structured spec:
    ```
    ## Goal
@@ -234,8 +234,8 @@ Explores the codebase when you have a vague idea but don't know how to implement
    - 2–3 directions with pros/cons
    - Recommendation
 5. Present directions to the user; ask them to pick one (or "Cancel — save report only").
-6. On pick: create 3–7 phased issues in the repo, add each to the project with Status=Todo, Level=L3, tagged `phase:1`, `phase:2`, etc. Each issue links back to the report issue number.
-7. Create an anchor issue for the full exploration report (tagged `[Explore]`), add to project.
+6. Create the anchor issue for the full exploration report (tagged `[Explore]`), add to project. Record its issue number.
+7. On pick: create 3–7 phased issues in the repo, add each to the project with Status=Todo, Level=L3, tagged `phase:1`, `phase:2`, etc. Each issue body links back to the anchor report issue number from step 6.
 8. Output summary of created issues.
 
 **Cancel path:** If the user picks Cancel, only the anchor report issue is created — no implementation tasks.
@@ -254,6 +254,7 @@ The `shared/graphql.md` file must provide templates for these operations:
 | `getProjectItem` | Fetch a single item by issue number (for `move`, `run`, etc.) |
 | `updateFieldValue` | Set a single-select field value on an item (advance pipeline status) |
 | `addIssueToProject` | Add an existing issue as a project item |
+| `removeItemFromProject` | Remove a project item by itemId (`deleteProjectV2Item` mutation) |
 
 All operations require: `projectId` (node ID of the project), `fieldId` (node ID of the field), `itemId` (node ID of the project item), `optionId` (node ID of the select option).
 
