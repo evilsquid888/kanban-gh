@@ -196,6 +196,25 @@ In `--auto` mode, these pauses are skipped and the pipeline continues automatica
 
 If the pipeline is aborted mid-run, the item's Status stays at whatever column it was last advanced to.
 
+**Retry limit:**
+
+Each agent is allowed a maximum of **2 rejections per task** before the pipeline pauses for human review — even in `--auto` mode. On the 2nd rejection of the same agent (e.g. Builder rejected twice), the pipeline:
+1. Posts a comment: `> ⚠️ [kanban-gh] Builder has been rejected 2 times. Pausing for human review.`
+2. Leaves the item at its current Status column.
+3. Exits and waits for the user to intervene (edit requirements or manually advance).
+
+The rejection count resets to 0 each time an agent successfully passes its review step.
+
+**Board loop mode (`--loop`):**
+
+`/kanban-gh-run --loop` processes the entire backlog continuously: it picks the next `Todo` item, runs its full pipeline, then picks the next, until all `Todo` items are exhausted or a retry-limit pause occurs. Integrates with [Ralph Loop](https://github.com/cyanluna/cyanluna.skills) if available — if Ralph Loop is active in the session, `--loop` defers to it for scheduling. Without Ralph Loop, `--loop` runs sequentially.
+
+Usage:
+```
+/kanban-gh-run --loop          # process all Todo items
+/kanban-gh-run --loop --auto   # process all, skip review pauses (retry limit still applies)
+```
+
 **Done:** Final comment: `> ✅ Pipeline complete. All done-when criteria met.` Status set to `Done`.
 
 ---
