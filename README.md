@@ -103,6 +103,53 @@ No local database. No web server. GitHub IS the board.
 
 ---
 
+## Setting Up Your Board View
+
+After running `/kanban-gh-init`, configure your GitHub Project for a kanban-style board view:
+
+### 1. Open your GitHub Project
+
+Go to `github.com/users/<your-username>/projects/<number>` (the URL printed by `/kanban-gh-init`).
+
+### 2. Switch to Board layout
+
+- Click the **View** dropdown (top-left, next to the view name)
+- Select **Board**
+- The board groups items by the `Status` field by default — this is what you want
+
+### 3. Configure columns
+
+Your board should show 7 columns matching the pipeline:
+
+```
+Todo → Plan → Plan Review → Implement → Impl Review → Test → Done
+```
+
+If columns are out of order, drag them to match this sequence. If any pipeline status is missing from the column headers, click **+ New column** and select the missing status option.
+
+### 4. Add useful fields to cards
+
+Click the **⚙️** (settings) icon on the board view, then under **Fields**:
+- Enable **Priority** — shows priority badge on each card
+- Enable **Level** — shows L1/L2/L3 on each card
+- Enable **Labels** — if you use GitHub labels
+
+### 5. Create a filtered view (optional)
+
+For focused work, create additional views:
+
+- **Active Work** — filter: `Status:Plan,Implement,"Plan Review","Impl Review",Test`
+- **Backlog** — filter: `Status:Todo`
+- **Completed** — filter: `Status:Done`
+
+To create a view: click **+ New view** → choose **Board** or **Table** → set filters.
+
+### 6. Save as default
+
+Click the **▾** next to your view name → **Save changes**. This persists your layout, column order, and field visibility.
+
+---
+
 ## License
 
 MIT
