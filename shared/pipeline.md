@@ -14,7 +14,7 @@ Pipeline levels, transition rules, agent context flow, and prompt templates for 
 Todo → Implement → Done
 ```
 
-Agents involved: Builder only. No planning or review steps.
+Agents involved: Builder + Shield. No planning or review steps.
 
 ### L2 Standard
 
@@ -73,6 +73,7 @@ How agents read and write via GitHub Issues:
 | `Shield` | Issue body + Builder comment | Issue comment (test notes) | `gh issue comment` |
 | `Inspector` | Issue body + Planner comment + Builder comment + Shield comment | Issue comment (review verdict) | `gh issue comment` |
 | `Ranger` | Builder comment + Shield comment | Issue comment (test results) | `gh issue comment` |
+| `Refiner` | Issue body | Rewrites issue body with structured spec | `gh issue edit` |
 
 **Reading previous agent comments:** Agents fetch all comments via `gh issue view <NUMBER> --repo <REPO> --json comments` and identify relevant ones by signature header (e.g., find the comment starting with `> **Planner**` to read the plan). See Section 5 for parsing snippets.
 

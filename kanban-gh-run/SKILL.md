@@ -207,7 +207,8 @@ fi
 
 | Current Status | Agent | Nickname | Model | Advances To |
 |---------------|-------|----------|-------|-------------|
-| `Todo` | Plan Agent | `Planner` | `opus` | `Plan Review` (L3) or `Implement` (L2) or stay for Builder (L1) |
+| `Todo` (L2/L3) | Plan Agent | `Planner` | `opus` | `Plan Review` (L3) or `Implement` (L2) |
+| `Todo` (L1) | — | — | — | Skip directly to Builder dispatch at `Implement` |
 | `Plan Review` | Review Agent | `Critic` | `sonnet` | `Implement` (approved) or `Plan` (rejected) |
 | `Implement` | Worker + TDD | `Builder` then `Shield` | `opus` then `sonnet` | `Impl Review` |
 | `Impl Review` | Code Review | `Inspector` | `sonnet` | `Test` (L3) or `Done` (L2) if approved, `Implement` if rejected |
@@ -215,8 +216,7 @@ fi
 
 ### Status Transitions After Agent Completion
 
-**After Planner completes:**
-- L1: Do not change status. Proceed immediately to Builder dispatch.
+**After Planner completes** (L2/L3 only — Planner is skipped for L1):
 - L2: Update Status → `Implement` via `updateFieldValue`.
 - L3: Update Status → `Plan Review` via `updateFieldValue`.
 
