@@ -10,10 +10,10 @@ Location: `.claude/kanban-gh.json`
 
 ```json
 {
-  "project": "My Project Name",
-  "owner": "my-org-or-user",
-  "ownerType": "organization",
-  "repo": "my-repo",
+  "project": "2",
+  "owner": "evilsquid888",
+  "ownerType": "user",
+  "repo": "evilsquid888/my-project",
   "retries": 2
 }
 ```
@@ -22,10 +22,10 @@ Location: `.claude/kanban-gh.json`
 
 | Field | Type | Description | Default |
 |-------|------|-------------|---------|
-| `project` | string | GitHub Projects v2 project title | required |
+| `project` | string | GitHub Projects v2 project number | required |
 | `owner` | string | GitHub org or user login | required |
 | `ownerType` | `user` \| `organization` | Owner account type | required |
-| `repo` | string | Repository name (without owner prefix) | required |
+| `repo` | string | Repository in `owner/repo` format | required |
 | `retries` | number | Number of retry attempts for API calls | `2` |
 
 ### Config Loading Snippet
@@ -84,7 +84,7 @@ Comma-separated list of free-form tags, e.g. `backend,auth,breaking-change`.
 | `Planner` | Plan Agent | `opus` | Plan + Decision Log + Done When |
 | `Critic` | Plan Review | `sonnet` | Review verdict + scores |
 | `Builder` | Worker | `opus` | Implementation notes |
-| `Shield` | TDD Tester | `sonnet` | Test notes |
+| `Shield` | TDD Tester | `sonnet` | Test notes (separate comment from Builder's) |
 | `Inspector` | Code Review | `sonnet` | Review verdict + scores |
 | `Ranger` | Test Runner | `sonnet` | Test results |
 
