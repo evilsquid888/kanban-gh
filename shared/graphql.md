@@ -150,21 +150,30 @@ OPTION_ID=$(echo "$FIELDS" | jq -r '.[] | select(.name == "Status") | .options[]
 
 Create a new field on a project. Two variants are provided: single-select (with options) and plain text.
 
+**Important:** Single-select options require `name`, `color`, and `description` (all three are required by the GitHub API).
+
+Valid colors: `GRAY`, `BLUE`, `GREEN`, `YELLOW`, `ORANGE`, `RED`, `PINK`, `PURPLE`.
+
 **Single-select field:**
 
 ```graphql
-mutation {
+mutation($projectId: ID!) {
   createProjectV2Field(input: {
-    projectId: "$PROJECT_ID"
+    projectId: $projectId
     dataType: SINGLE_SELECT
     name: "$FIELD_NAME"
     singleSelectOptions: [
-      {name: "$OPTION_1", color: BLUE},
-      {name: "$OPTION_2", color: GREEN},
-      {name: "$OPTION_3", color: RED}
+      {name: "$OPTION_1", color: BLUE, description: "$DESC_1"},
+      {name: "$OPTION_2", color: GREEN, description: "$DESC_2"},
+      {name: "$OPTION_3", color: RED, description: "$DESC_3"}
     ]
   }) {
-    projectV2Field { id }
+    projectV2Field {
+      ... on ProjectV2SingleSelectField {
+        id
+        options { id name }
+      }
+    }
   }
 }
 ```
@@ -172,13 +181,13 @@ mutation {
 **Text field:**
 
 ```graphql
-mutation {
+mutation($projectId: ID!) {
   createProjectV2Field(input: {
-    projectId: "$PROJECT_ID"
+    projectId: $projectId
     dataType: TEXT
     name: "$FIELD_NAME"
   }) {
-    projectV2Field { id }
+    projectV2Field { ... on ProjectV2Field { id } }
   }
 }
 ```
@@ -186,34 +195,82 @@ mutation {
 **Usage:**
 
 ```bash
-# Single-select field
+# Single-select field (example: Priority)
 gh api graphql -f query='
-mutation {
+mutation($projectId: ID!) {
   createProjectV2Field(input: {
-    projectId: "$PROJECT_ID"
+    projectId: $projectId
     dataType: SINGLE_SELECT
-    name: "$FIELD_NAME"
+    name: "Priority"
     singleSelectOptions: [
-      {name: "$OPTION_1", color: BLUE},
-      {name: "$OPTION_2", color: GREEN},
-      {name: "$OPTION_3", color: RED}
+      {name: "low", color: GREEN, description: "Low priority"},
+      {name: "medium", color: YELLOW, description: "Medium priority"},
+      {name: "high", color: RED, description: "High priority"}
     ]
   }) {
-    projectV2Field { id }
+    projectV2Field { ... on ProjectV2SingleSelectField { id options { id name } } }
   }
-}' -f projectId="$PROJECT_ID" -f fieldName="$FIELD_NAME"
+}' -f projectId="$PROJECT_ID"
 
-# Text field
+# Text field (example: Tags)
 gh api graphql -f query='
-mutation {
+mutation($projectId: ID!) {
   createProjectV2Field(input: {
-    projectId: "$PROJECT_ID"
+    projectId: $projectId
     dataType: TEXT
-    name: "$FIELD_NAME"
+    name: "Tags"
   }) {
-    projectV2Field { id }
+    projectV2Field { ... on ProjectV2Field { id } }
   }
-}' -f projectId="$PROJECT_ID" -f fieldName="$FIELD_NAME"
+}' -f projectId="$PROJECT_ID"
+```
+
+---
+
+### 3b. `updateField`
+
+Update an existing single-select field's options. Use this when a field already exists but has the wrong options (e.g., the default `Status` field on a new GitHub Project has `Todo`, `In Progress`, `Done` — we need to replace these with our 7-column pipeline statuses).
+
+**Important:** `updateProjectV2Field` takes `fieldId` only — NOT `projectId`.
+
+```graphql
+mutation($fieldId: ID!) {
+  updateProjectV2Field(input: {
+    fieldId: $fieldId
+    singleSelectOptions: [
+      {name: "$OPTION_1", color: GREEN, description: "$DESC_1"},
+      {name: "$OPTION_2", color: BLUE, description: "$DESC_2"}
+    ]
+  }) {
+    projectV2Field {
+      ... on ProjectV2SingleSelectField {
+        options { id name }
+      }
+    }
+  }
+}
+```
+
+**Usage (replace Status options with pipeline statuses):**
+
+```bash
+gh api graphql -f query='
+mutation($fieldId: ID!) {
+  updateProjectV2Field(input: {
+    fieldId: $fieldId
+    singleSelectOptions: [
+      {name: "Todo", color: GREEN, description: "Not yet started"},
+      {name: "Plan", color: BLUE, description: "Planning in progress"},
+      {name: "Plan Review", color: PURPLE, description: "Plan awaiting review"},
+      {name: "Implement", color: ORANGE, description: "Implementation in progress"},
+      {name: "Impl Review", color: PINK, description: "Implementation awaiting review"},
+      {name: "Test", color: YELLOW, description: "Testing in progress"},
+      {name: "Done", color: GRAY, description: "Complete"}
+    ]
+  }) {
+    projectV2Field { ... on ProjectV2SingleSelectField { options { id name } } }
+  }
+}' -f fieldId="$STATUS_FIELD_ID"
 ```
 
 ---

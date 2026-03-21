@@ -183,20 +183,40 @@ For each field:
 
 1. **Field does not exist** → create it (see creation commands below).
 2. **Field exists with correct type and all required options present** → skip, no action needed.
-3. **Field exists with wrong type OR missing required options** → warn and exit:
+3. **Field exists with correct type but missing required options** → update the field's options using `updateField` from `shared/graphql.md` (section 3b). This is the **common case** for `Status` — every new GitHub Project has a default `Status` field with `Todo`, `In Progress`, `Done`. We replace these with our 7-column pipeline options.
+4. **Field exists with wrong type** (e.g. `TEXT` instead of `SINGLE_SELECT`) → warn and exit:
 
 ```
-⚠️ Field '<NAME>' exists but has wrong type/options. Cannot auto-fix.
-Current: <show current dataType and options list>
-Required: <show required dataType and options list>
+⚠️ Field '<NAME>' exists but has wrong type. Cannot auto-fix.
+Current type: <show current dataType>
+Required type: SINGLE_SELECT
 Fix manually in GitHub Projects settings, then re-run /kanban-gh-init.
 ```
 
 To check option presence:
 
 ```bash
-# Example: check that "Todo" exists in Status options
-HAS_TODO=$(echo "$STATUS_FIELD" | jq -r '.options[]? | select(.name == "Todo") | .name')
+# Example: check that "Plan" exists in Status options
+HAS_PLAN=$(echo "$STATUS_FIELD" | jq -r '.options[]? | select(.name == "Plan") | .name')
+```
+
+To update existing field options (see `shared/graphql.md` section 3b `updateField`):
+
+```bash
+FIELD_ID=$(echo "$STATUS_FIELD" | jq -r '.id')
+gh api graphql -f query='
+mutation($fieldId: ID!) {
+  updateProjectV2Field(input: {
+    fieldId: $fieldId
+    singleSelectOptions: [
+      {name: "Todo", color: GREEN, description: "Not yet started"},
+      {name: "Plan", color: BLUE, description: "Planning in progress"},
+      ...
+    ]
+  }) {
+    projectV2Field { ... on ProjectV2SingleSelectField { options { id name } } }
+  }
+}' -f fieldId="$FIELD_ID"
 ```
 
 ### Required fields
@@ -205,93 +225,108 @@ HAS_TODO=$(echo "$STATUS_FIELD" | jq -r '.options[]? | select(.name == "Todo") |
 
 Required options (in order): `Todo`, `Plan`, `Plan Review`, `Implement`, `Impl Review`, `Test`, `Done`
 
-If creating:
+If field does not exist, create it. If it exists as SINGLE_SELECT but with wrong options, update it using `updateField` (section 3b of `shared/graphql.md`).
 
 ```bash
+# Create new Status field (if it doesn't exist at all)
 gh api graphql -f query='
-mutation {
+mutation($projectId: ID!) {
   createProjectV2Field(input: {
-    projectId: "'"$PROJECT_ID"'"
+    projectId: $projectId
     dataType: SINGLE_SELECT
     name: "Status"
     singleSelectOptions: [
-      {name: "Todo",        color: GRAY},
-      {name: "Plan",        color: BLUE},
-      {name: "Plan Review", color: PURPLE},
-      {name: "Implement",   color: YELLOW},
-      {name: "Impl Review", color: ORANGE},
-      {name: "Test",        color: PINK},
-      {name: "Done",        color: GREEN}
+      {name: "Todo",        color: GREEN,  description: "Not yet started"},
+      {name: "Plan",        color: BLUE,   description: "Planning in progress"},
+      {name: "Plan Review", color: PURPLE, description: "Plan awaiting review"},
+      {name: "Implement",   color: ORANGE, description: "Implementation in progress"},
+      {name: "Impl Review", color: PINK,   description: "Implementation awaiting review"},
+      {name: "Test",        color: YELLOW, description: "Testing in progress"},
+      {name: "Done",        color: GRAY,   description: "Complete"}
     ]
   }) {
-    projectV2Field { id }
+    projectV2Field { ... on ProjectV2SingleSelectField { id options { id name } } }
   }
-}'
+}' -f projectId="$PROJECT_ID"
+
+# OR update existing Status field options (common case — new projects have default Status)
+FIELD_ID=$(echo "$STATUS_FIELD" | jq -r '.id')
+gh api graphql -f query='
+mutation($fieldId: ID!) {
+  updateProjectV2Field(input: {
+    fieldId: $fieldId
+    singleSelectOptions: [
+      {name: "Todo",        color: GREEN,  description: "Not yet started"},
+      {name: "Plan",        color: BLUE,   description: "Planning in progress"},
+      {name: "Plan Review", color: PURPLE, description: "Plan awaiting review"},
+      {name: "Implement",   color: ORANGE, description: "Implementation in progress"},
+      {name: "Impl Review", color: PINK,   description: "Implementation awaiting review"},
+      {name: "Test",        color: YELLOW, description: "Testing in progress"},
+      {name: "Done",        color: GRAY,   description: "Complete"}
+    ]
+  }) {
+    projectV2Field { ... on ProjectV2SingleSelectField { options { id name } } }
+  }
+}' -f fieldId="$FIELD_ID"
 ```
 
 #### Priority (SINGLE_SELECT)
 
 Required options: `low`, `medium`, `high`
 
-If creating:
-
 ```bash
 gh api graphql -f query='
-mutation {
+mutation($projectId: ID!) {
   createProjectV2Field(input: {
-    projectId: "'"$PROJECT_ID"'"
+    projectId: $projectId
     dataType: SINGLE_SELECT
     name: "Priority"
     singleSelectOptions: [
-      {name: "low",    color: GRAY},
-      {name: "medium", color: YELLOW},
-      {name: "high",   color: RED}
+      {name: "low",    color: GREEN,  description: "Low priority"},
+      {name: "medium", color: YELLOW, description: "Medium priority"},
+      {name: "high",   color: RED,    description: "High priority"}
     ]
   }) {
-    projectV2Field { id }
+    projectV2Field { ... on ProjectV2SingleSelectField { id options { id name } } }
   }
-}'
+}' -f projectId="$PROJECT_ID"
 ```
 
 #### Level (SINGLE_SELECT)
 
 Required options: `L1`, `L2`, `L3`
 
-If creating:
-
 ```bash
 gh api graphql -f query='
-mutation {
+mutation($projectId: ID!) {
   createProjectV2Field(input: {
-    projectId: "'"$PROJECT_ID"'"
+    projectId: $projectId
     dataType: SINGLE_SELECT
     name: "Level"
     singleSelectOptions: [
-      {name: "L1", color: GREEN},
-      {name: "L2", color: YELLOW},
-      {name: "L3", color: RED}
+      {name: "L1", color: GREEN,  description: "Quick"},
+      {name: "L2", color: YELLOW, description: "Standard"},
+      {name: "L3", color: RED,    description: "Full"}
     ]
   }) {
-    projectV2Field { id }
+    projectV2Field { ... on ProjectV2SingleSelectField { id options { id name } } }
   }
-}'
+}' -f projectId="$PROJECT_ID"
 ```
 
 #### Tags (TEXT)
 
-If creating:
-
 ```bash
 gh api graphql -f query='
-mutation {
+mutation($projectId: ID!) {
   createProjectV2Field(input: {
-    projectId: "'"$PROJECT_ID"'"
+    projectId: $projectId
     dataType: TEXT
     name: "Tags"
   }) {
-    projectV2Field { id }
+    projectV2Field { ... on ProjectV2Field { id } }
   }
-}'
+}' -f projectId="$PROJECT_ID"
 ```
 
 After processing all four fields, print a summary:
