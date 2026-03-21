@@ -87,6 +87,7 @@ Comma-separated list of free-form tags, e.g. `backend,auth,breaking-change`.
 | `Shield` | TDD Tester | `sonnet` | Test notes (separate comment from Builder's) |
 | `Inspector` | Code Review | `sonnet` | Review verdict + scores |
 | `Ranger` | Test Runner | `sonnet` | Test results |
+| `Refiner` | Requirements Refinement | `sonnet` | Refined description (rewrites issue body) |
 
 ---
 

@@ -141,7 +141,7 @@ Extract a field ID and option ID by name:
 ```bash
 FIELDS=$(echo "$RESPONSE" | jq '.data.node.fields.nodes')
 FIELD_ID=$(echo "$FIELDS" | jq -r '.[] | select(.name == "Status") | .id')
-OPTION_ID=$(echo "$FIELDS" | jq -r '.[] | select(.name == "Status") | .options[] | select(.name == "In Progress") | .id')
+OPTION_ID=$(echo "$FIELDS" | jq -r '.[] | select(.name == "Status") | .options[] | select(.name == "Implement") | .id')
 ```
 
 ---
@@ -298,6 +298,53 @@ Extract a specific item's ID by issue number:
 ```bash
 ITEM_ID=$(echo "$RESPONSE" | jq -r --argjson num "$ISSUE_NUMBER" \
   '.data.node.items.nodes[] | select(.content.number == $num) | .id')
+```
+
+---
+
+### 4b. `getProjectItem`
+
+Fetch a single project item by issue number. This is a convenience wrapper — it uses `getProjectItems` and filters by issue number.
+
+```bash
+# Fetch all items and filter to a specific issue number
+ITEM=$(gh api graphql -f query='
+  query($projectId: ID!) {
+    node(id: $projectId) {
+      ... on ProjectV2 {
+        items(first: 100) {
+          nodes {
+            id
+            content {
+              ... on Issue { number title body url }
+            }
+            fieldValues(first: 20) {
+              nodes {
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  field { ... on ProjectV2SingleSelectField { name } }
+                  name
+                }
+                ... on ProjectV2ItemFieldTextValue {
+                  field { ... on ProjectV2Field { name } }
+                  text
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+' -f projectId="$PROJECT_ID" \
+  --jq ".data.node.items.nodes[] | select(.content.number == $ISSUE_NUMBER)")
+```
+
+Extract fields from the result:
+
+```bash
+ITEM_ID=$(echo "$ITEM" | jq -r '.id')
+STATUS=$(echo "$ITEM" | jq -r '.fieldValues.nodes[] | select(.field.name == "Status") | .name')
+LEVEL=$(echo "$ITEM" | jq -r '.fieldValues.nodes[] | select(.field.name == "Level") | .name')
 ```
 
 ---

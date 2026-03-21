@@ -2,7 +2,7 @@
 
 AI-powered kanban pipeline for Claude Code — powered by GitHub Projects.
 
-Seven autonomous agents, one GitHub Project board. No database. No local server.
+Six autonomous agents, one GitHub Project board. No database. No local server.
 
 ---
 
@@ -73,7 +73,7 @@ Todo → Plan → Plan Review → Implement → Impl Review → Test → Done
 | Level | Path | Use Case |
 |-------|------|----------|
 | L1 Quick | Todo → Implement → Done | Config changes, typo fixes |
-| L2 Standard | Todo → Plan → Implement → Review → Done | Bug fixes, refactoring |
+| L2 Standard | Todo → Plan → Implement → Impl Review → Done | Bug fixes, refactoring |
 | L3 Full | Full 7-column pipeline | New features, architecture |
 
 ---
