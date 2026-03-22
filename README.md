@@ -1,8 +1,14 @@
 # kanban-gh
 
-AI-powered kanban pipeline for Claude Code — powered by GitHub Projects.
+Turn GitHub Projects into an autonomous dev pipeline powered by Claude Code.
 
-Seven autonomous agents, one GitHub Project board. No database. No local server.
+Write a task title. Seven AI agents plan it, build it, review the code, and run the tests — all tracked on a real GitHub Project board. No database, no server, no setup beyond copying skill files.
+
+- **Fully autonomous pipeline** — plan, implement, review, and test without manual handoffs
+- **Seven specialized agents** — Planner, Critic, Builder, Shield, Inspector, Ranger, Refiner
+- **GitHub Projects as the single source of truth** — no extra infrastructure
+- **Three pipeline levels** — from quick config fixes (L1) to full-feature builds (L3)
+- **Just slash commands** — runs as Claude Code skills, nothing else to install
 
 ---
 
