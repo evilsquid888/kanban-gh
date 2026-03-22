@@ -228,7 +228,7 @@ For each field:
 
 1. **Field does not exist** → create it (see creation commands below).
 2. **Field exists with correct type and all required options present** → skip, no action needed.
-3. **Field exists with correct type but missing required options** → update the field's options using `updateField` from `shared/graphql.md` (section 3b). This is the **common case** for `Status` — every new GitHub Project has a default `Status` field with `Todo`, `In Progress`, `Done`. We replace these with our 7-column pipeline options.
+3. **Field exists with correct type but missing required options** → update the field's options using `updateField` from `shared/graphql.md` (section 3b). This is the **common case** for `Status` — every new GitHub Project has a default `Status` field with `Todo`, `In Progress`, `Done`. We replace these with our 8-column pipeline options (including Backlog).
 4. **Field exists with wrong type** (e.g. `TEXT` instead of `SINGLE_SELECT`) → warn and exit:
 
 ```
@@ -268,7 +268,7 @@ mutation($fieldId: ID!) {
 
 #### Status (SINGLE_SELECT)
 
-Required options (in order): `Todo`, `Plan`, `Plan Review`, `Implement`, `Impl Review`, `Test`, `Done`
+Required options (in order): `Backlog`, `Todo`, `Plan`, `Plan Review`, `Implement`, `Impl Review`, `Test`, `Done`
 
 If field does not exist, create it. If it exists as SINGLE_SELECT but with wrong options, update it using `updateField` (section 3b of `shared/graphql.md`).
 
@@ -281,6 +281,7 @@ mutation($projectId: ID!) {
     dataType: SINGLE_SELECT
     name: "Status"
     singleSelectOptions: [
+      {name: "Backlog",     color: BLUE,   description: "Parked for later"},
       {name: "Todo",        color: GREEN,  description: "Not yet started"},
       {name: "Plan",        color: BLUE,   description: "Planning in progress"},
       {name: "Plan Review", color: PURPLE, description: "Plan awaiting review"},
@@ -294,13 +295,14 @@ mutation($projectId: ID!) {
   }
 }' -f projectId="$PROJECT_ID"
 
-# OR update existing Status field options (common case — new projects have default Status)
+# OR update existing Status field options (common case — new projects have default Status with Backlog preserved)
 FIELD_ID=$(echo "$STATUS_FIELD" | jq -r '.id')
 gh api graphql -f query='
 mutation($fieldId: ID!) {
   updateProjectV2Field(input: {
     fieldId: $fieldId
     singleSelectOptions: [
+      {name: "Backlog",     color: BLUE,   description: "Parked for later"},
       {name: "Todo",        color: GREEN,  description: "Not yet started"},
       {name: "Plan",        color: BLUE,   description: "Planning in progress"},
       {name: "Plan Review", color: PURPLE, description: "Plan awaiting review"},
