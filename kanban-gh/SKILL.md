@@ -241,7 +241,7 @@ TODO_OPTION_ID=$(echo "$FIELDS" | jq -r '.[] | select(.name == "Status") | .opti
 
 Fetch all items and render a markdown table sorted by status column order.
 
-**Status column order:** Todo, Plan, Plan Review, Implement, Impl Review, Test, Done
+**Status column order:** Backlog, Todo, Plan, Plan Review, Implement, Impl Review, Test, Done
 
 **Steps:**
 
@@ -672,11 +672,12 @@ Show a count of items by status.
 2. Count items by Status field value.
    - **Project mode:** group by `fieldValues.nodes[] | select(.field.name == "Status") | .name`
    - **Repo mode:** group by `status:` label value, converted to display name via `label_to_display`
-3. Render table in pipeline order (Todo first, Done last):
+3. Render table in pipeline order (Backlog first, Done last):
 
 ```
 | Status | Count |
 |--------|-------|
+| Backlog | 3 |
 | Todo | 5 |
 | Plan | 2 |
 | Plan Review | 0 |
@@ -684,10 +685,10 @@ Show a count of items by status.
 | Impl Review | 1 |
 | Test | 0 |
 | Done | 10 |
-| **Total** | **21** |
+| **Total** | **24** |
 ```
 
-Include all status values even if count is 0.
+Include all status values even if count is 0 (including Backlog).
 
 ---
 
@@ -730,10 +731,11 @@ If `closedAt` is within 3 days of now, include in "Recently Done".
 **Test**: (none)
 **Plan**: (none)
 **Todo**: 8 items (showing next 5): #8 Add logging, #9 Write docs, #10 Setup CI, #11 Add tests, #12 Update deps
+**Backlog**: 3 items
 **Recently Done** (last 3 days): #1 Setup project, #2 Init repo
 **Done total**: 10
 ```
 
-Show active statuses first (Implement, Plan Review, Impl Review, Test, Plan), then Todo summary, then Recently Done, then total Done count.
+Show active statuses first (Implement, Plan Review, Impl Review, Test, Plan), then Todo summary, then Backlog summary, then Recently Done, then total Done count.
 
 If a status has no items, show `(none)`.
