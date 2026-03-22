@@ -404,10 +404,11 @@ Error: Could not find repo '<REPO>'. Check the URL and try again.
 
 ### Create labels
 
-Create all 13 labels (7 status + 3 priority + 3 level) using `gh label create --force` (see `shared/graphql.md` section 8 "Create Labels"). The `--force` flag makes this idempotent — existing labels with the same name get their color and description updated.
+Create all 14 labels (8 status + 3 priority + 3 level) using `gh label create --force` (see `shared/graphql.md` section 8 "Create Labels"). The `--force` flag makes this idempotent — existing labels with the same name get their color and description updated.
 
 ```bash
 # Status labels
+gh label create "status:backlog"      --color "c5def5" --description "Parked for later"                    --repo "$REPO" --force
 gh label create "status:todo"         --color "0e8a16" --description "Not yet started"                    --repo "$REPO" --force
 gh label create "status:plan"         --color "0075ca" --description "Planning in progress"                --repo "$REPO" --force
 gh label create "status:plan-review"  --color "7057ff" --description "Plan awaiting review"                --repo "$REPO" --force
@@ -431,6 +432,7 @@ Print label creation summary:
 
 ```
 Labels:
+  status:backlog      — ✓ created/updated
   status:todo         — ✓ created/updated
   status:plan         — ✓ created/updated
   status:plan-review  — ✓ created/updated
@@ -567,7 +569,7 @@ For org-owned projects, use `github.com/orgs/<OWNER>/projects/<PROJECT_NUMBER>` 
 
   Repo:    <OWNER>/<REPO>
   Mode:    labels (no Project board)
-  Labels:  13 created/updated
+  Labels:  14 created/updated
   Config:  .claude/kanban-gh.json
 
 Add tasks with /kanban-gh add <title>

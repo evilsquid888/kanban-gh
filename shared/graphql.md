@@ -532,6 +532,7 @@ Create all required labels on a repo. Uses `--force` to update color/description
 
 ```bash
 # Status labels
+gh label create "status:backlog"      --color "c5def5" --description "Parked for later"                    --repo "$REPO" --force
 gh label create "status:todo"         --color "0e8a16" --description "Not yet started"                    --repo "$REPO" --force
 gh label create "status:plan"         --color "0075ca" --description "Planning in progress"                --repo "$REPO" --force
 gh label create "status:plan-review"  --color "7057ff" --description "Plan awaiting review"                --repo "$REPO" --force
