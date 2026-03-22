@@ -2,7 +2,7 @@
 
 Turn GitHub Projects into an autonomous dev pipeline powered by Claude Code.
 
-Write a task title. Seven AI agents plan it, build it, review the code, and run the tests — all tracked on a real GitHub Project board. No database, no server, no setup beyond copying skill files.
+Write a task title. Six AI agents plan it, build it, review the code, and run the tests — all tracked on a real GitHub Project board. No database, no server, minimal setup — just `gh` CLI and a few copied skill files.
 
 - **Fully autonomous pipeline** — plan, implement, review, and test without manual handoffs
 - **Seven specialized agents** — Planner, Critic, Builder, Shield, Inspector, Ranger, Refiner
