@@ -1,6 +1,6 @@
-# Shared GraphQL Templates
+# Shared GraphQL Templates & Label Operations
 
-GraphQL query and mutation templates for GitHub Projects v2. All `$VARIABLES` are substituted at runtime by skill scripts.
+GraphQL query and mutation templates for GitHub Projects v2, and `gh` CLI label commands for repo mode. All `$VARIABLES` are substituted at runtime by skill scripts.
 
 ---
 
@@ -513,4 +513,142 @@ mutation {
 }' \
   -f projectId="$PROJECT_ID" \
   -f itemId="$ITEM_ID"
+```
+
+---
+
+## Label Operations (Repo Mode)
+
+When `mode` is `"repo"`, status/priority/level tracking uses GitHub labels instead of Project fields. All operations use the `gh` CLI — no GraphQL needed.
+
+**Reference:** See `shared/schema.md` for the full label naming convention, color table, and display name mapping.
+
+---
+
+### 8. Create Labels (Init)
+
+Create all required labels on a repo. Uses `--force` to update color/description if the label already exists (idempotent).
+
+```bash
+# Status labels
+gh label create "status:todo"         --color "0e8a16" --description "Not yet started"                    --repo "$REPO" --force
+gh label create "status:plan"         --color "0075ca" --description "Planning in progress"                --repo "$REPO" --force
+gh label create "status:plan-review"  --color "7057ff" --description "Plan awaiting review"                --repo "$REPO" --force
+gh label create "status:implement"    --color "e99695" --description "Implementation in progress"          --repo "$REPO" --force
+gh label create "status:impl-review"  --color "d876e3" --description "Implementation awaiting review"      --repo "$REPO" --force
+gh label create "status:test"         --color "fbca04" --description "Testing in progress"                 --repo "$REPO" --force
+gh label create "status:done"         --color "ededed" --description "Complete"                             --repo "$REPO" --force
+
+# Priority labels
+gh label create "priority:low"    --color "0e8a16" --description "Low priority"    --repo "$REPO" --force
+gh label create "priority:medium" --color "fbca04" --description "Medium priority" --repo "$REPO" --force
+gh label create "priority:high"   --color "d73a4a" --description "High priority"   --repo "$REPO" --force
+
+# Level labels
+gh label create "level:L1" --color "0e8a16" --description "Level 1 — Quick"    --repo "$REPO" --force
+gh label create "level:L2" --color "fbca04" --description "Level 2 — Standard" --repo "$REPO" --force
+gh label create "level:L3" --color "d73a4a" --description "Level 3 — Full"     --repo "$REPO" --force
+```
+
+---
+
+### 9. Add Labels to an Issue
+
+```bash
+# Set initial labels when adding a new task
+gh issue edit $NUMBER --repo "$REPO" --add-label "status:todo,priority:$PRIORITY,level:$LEVEL"
+```
+
+---
+
+### 10. Swap a Status Label (Move)
+
+Remove the old status label and add the new one in a single edit:
+
+```bash
+gh issue edit $NUMBER --repo "$REPO" --remove-label "status:$OLD_STATUS" --add-label "status:$NEW_STATUS"
+```
+
+Where `$OLD_STATUS` and `$NEW_STATUS` are the label-format values (e.g., `plan-review`, `implement`).
+
+---
+
+### 11. Swap a Field Label (Edit)
+
+For priority or level changes:
+
+```bash
+# Change priority
+gh issue edit $NUMBER --repo "$REPO" --remove-label "priority:$OLD" --add-label "priority:$NEW"
+
+# Change level
+gh issue edit $NUMBER --repo "$REPO" --remove-label "level:$OLD" --add-label "level:$NEW"
+```
+
+---
+
+### 12. Remove All Kanban Labels
+
+Strip all `status:`, `priority:`, and `level:` labels from an issue:
+
+```bash
+# Get current kanban labels
+KANBAN_LABELS=$(gh issue view $NUMBER --repo "$REPO" --json labels --jq '[.labels[].name | select(startswith("status:") or startswith("priority:") or startswith("level:"))] | join(",")')
+
+# Remove them
+if [ -n "$KANBAN_LABELS" ]; then
+  gh issue edit $NUMBER --repo "$REPO" --remove-label "$KANBAN_LABELS"
+fi
+```
+
+---
+
+### 13. Fetch All Tracked Issues (Repo Mode)
+
+Fetch all open issues and closed done issues, then parse labels client-side:
+
+```bash
+# All open issues (includes tracked and untracked)
+ALL_OPEN=$(gh issue list --repo "$REPO" --state open --json number,title,body,url,labels --limit 200)
+
+# Closed issues with status:done
+DONE_CLOSED=$(gh issue list --repo "$REPO" --state closed --label "status:done" --json number,title,body,url,labels --limit 100)
+
+# Combine and deduplicate
+ALL_ISSUES=$(echo "$ALL_OPEN" "$DONE_CLOSED" | jq -s 'add | unique_by(.number)')
+```
+
+Filter to only tracked issues (those with at least one `status:` label):
+
+```bash
+TRACKED=$(echo "$ALL_ISSUES" | jq '[.[] | select(.labels[].name | startswith("status:"))]')
+```
+
+Parse fields from a single issue:
+
+```bash
+parse_item_repo() {
+  local ITEM="$1"
+  NUMBER=$(echo "$ITEM" | jq -r '.number')
+  TITLE=$(echo "$ITEM" | jq -r '.title')
+  STATUS=$(echo "$ITEM" | jq -r '[.labels[].name | select(startswith("status:"))] | first // ""' | sed 's/^status://')
+  PRIORITY=$(echo "$ITEM" | jq -r '[.labels[].name | select(startswith("priority:"))] | first // ""' | sed 's/^priority://')
+  LEVEL=$(echo "$ITEM" | jq -r '[.labels[].name | select(startswith("level:"))] | first // ""' | sed 's/^level://')
+}
+```
+
+---
+
+### 14. Fetch Todo Issues (Repo Mode — for `--loop`)
+
+```bash
+TODO_ISSUES=$(gh issue list --repo "$REPO" --state open --label "status:todo" --json number,title,labels --limit 100 | jq 'sort_by(.number)')
+```
+
+---
+
+### 15. Search Issues by Title (Repo Mode — for ID Resolution)
+
+```bash
+MATCHES=$(gh issue list --repo "$REPO" --state open --search "$ARG" --json number,title,labels --limit 50)
 ```

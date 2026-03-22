@@ -1,14 +1,14 @@
 ---
 name: kanban-gh
-description: "Manage tasks in GitHub Projects. Supports add, list, move, edit, remove, stats, context. Uses GitHub Projects v2 as the data store. Run /kanban-gh-init first."
+description: "Manage tasks in GitHub Projects or via repo labels. Supports add, list, move, edit, remove, stats, context. Uses GitHub Projects v2 or repo labels as the data store. Run /kanban-gh-init first."
 license: MIT
 ---
 
-> Shared context: read ~/.claude/skills/shared/schema.md for field names, status values, and config format. Read ~/.claude/skills/shared/graphql.md for GraphQL operations. Read ~/.claude/skills/shared/pipeline.md for valid status transitions.
+> Shared context: read ~/.claude/skills/shared/schema.md for field names, status values, config format, and label naming convention. Read ~/.claude/skills/shared/graphql.md for GraphQL operations and label operations. Read ~/.claude/skills/shared/pipeline.md for valid status transitions.
 
 # kanban-gh
 
-CRUD commands for managing tasks in a GitHub Projects v2 board. Requires `/kanban-gh-init` to have been run first.
+CRUD commands for managing tasks in a GitHub Projects v2 board (project mode) or via repo labels (repo mode). Requires `/kanban-gh-init` to have been run first.
 
 ---
 
@@ -30,11 +30,15 @@ Every command begins by loading config from `.claude/kanban-gh.json`:
 
 ```bash
 CONFIG=$(cat .claude/kanban-gh.json 2>/dev/null)
-PROJECT=$(echo "$CONFIG" | jq -r '.project')
-OWNER=$(echo "$CONFIG" | jq -r '.owner')
-OWNER_TYPE=$(echo "$CONFIG" | jq -r '.ownerType')
+MODE=$(echo "$CONFIG" | jq -r '.mode // "project"')
 REPO=$(echo "$CONFIG" | jq -r '.repo')
+OWNER=$(echo "$CONFIG" | jq -r '.owner')
 RETRIES=$(echo "$CONFIG" | jq -r '.retries // 2')
+
+if [ "$MODE" = "project" ]; then
+  PROJECT=$(echo "$CONFIG" | jq -r '.project')
+  OWNER_TYPE=$(echo "$CONFIG" | jq -r '.ownerType')
+fi
 ```
 
 If the config file is missing, exit with:
@@ -42,6 +46,8 @@ If the config file is missing, exit with:
 ```
 Error: .claude/kanban-gh.json not found. Run /kanban-gh-init first.
 ```
+
+All subsequent operations branch on `$MODE`. When `$MODE` is `"project"`, use GraphQL operations from `shared/graphql.md`. When `$MODE` is `"repo"`, use label operations from `shared/graphql.md` sections 8–15.
 
 ---
 
@@ -59,12 +65,21 @@ NUMBER=$(echo "$ARG" | sed 's/^#//')
 
 ### Partial title match
 
-If the argument is not numeric, treat it as a case-insensitive substring to match against item titles. Fetch all items via `getProjectItems` (see GraphQL section), then filter:
+If the argument is not numeric, treat it as a case-insensitive substring to match against item titles.
+
+**Project mode:** Fetch all items via `getProjectItems` (see GraphQL section), then filter:
 
 ```bash
 MATCHES=$(echo "$ITEMS" | jq --arg q "$ARG" '
   [.[] | select(.content.title | ascii_downcase | contains($q | ascii_downcase))]
 ')
+COUNT=$(echo "$MATCHES" | jq 'length')
+```
+
+**Repo mode:** Search issues directly:
+
+```bash
+MATCHES=$(gh issue list --repo "$REPO" --state open --search "$ARG" --json number,title,labels --limit 50)
 COUNT=$(echo "$MATCHES" | jq 'length')
 ```
 
@@ -89,7 +104,11 @@ COUNT=$(echo "$MATCHES" | jq 'length')
 
 ## Shared: Fetch All Items
 
-Most commands need to fetch all project items. Resolve `$PROJECT_ID` first, then call `getProjectItems`:
+Most commands need to fetch all tracked items. The approach differs by mode.
+
+### Project mode
+
+Resolve `$PROJECT_ID` first, then call `getProjectItems`:
 
 ```bash
 # Resolve PROJECT_ID
@@ -147,9 +166,44 @@ query {
 ITEMS=$(echo "$ITEMS_RESPONSE" | jq '.data.node.items.nodes')
 ```
 
+### Repo mode
+
+Fetch all open issues plus closed done issues, then filter to tracked items (see `shared/graphql.md` section 13):
+
+```bash
+# All open issues
+ALL_OPEN=$(gh issue list --repo "$REPO" --state open --json number,title,body,url,labels --limit 200)
+
+# Closed issues with status:done
+DONE_CLOSED=$(gh issue list --repo "$REPO" --state closed --label "status:done" --json number,title,body,url,labels --limit 100)
+
+# Combine and deduplicate
+ALL_ISSUES=$(echo "$ALL_OPEN" "$DONE_CLOSED" | jq -s 'add | unique_by(.number)')
+
+# Filter to tracked issues (have at least one status: label)
+ITEMS=$(echo "$ALL_ISSUES" | jq '[.[] | select(any(.labels[].name; startswith("status:")))]')
+```
+
+Parse fields from a single item in repo mode:
+
+```bash
+parse_item_repo() {
+  local ITEM="$1"
+  NUMBER=$(echo "$ITEM" | jq -r '.number')
+  TITLE=$(echo "$ITEM" | jq -r '.title')
+  STATUS_LABEL=$(echo "$ITEM" | jq -r '[.labels[].name | select(startswith("status:"))] | first // ""' | sed 's/^status://')
+  PRIORITY=$(echo "$ITEM" | jq -r '[.labels[].name | select(startswith("priority:"))] | first // ""' | sed 's/^priority://')
+  LEVEL=$(echo "$ITEM" | jq -r '[.labels[].name | select(startswith("level:"))] | first // ""' | sed 's/^level://')
+  # Convert label value to display name (see shared/schema.md mapping)
+  STATUS=$(label_to_display "$STATUS_LABEL")
+}
+```
+
 ---
 
-## Shared: Resolve Field and Option IDs
+## Shared: Resolve Field and Option IDs (Project Mode Only)
+
+**This section applies only when `$MODE` is `"project"`.** In repo mode, there are no field/option IDs — labels are used directly by name.
 
 Before setting a field value, fetch field metadata:
 
@@ -194,6 +248,8 @@ Fetch all items and render a markdown table sorted by status column order.
 1. Load config and fetch all items (see Shared sections above).
 2. Parse each item's field values:
 
+**Project mode:**
+
 ```bash
 # Extract fields from a single item node
 parse_item() {
@@ -203,6 +259,20 @@ parse_item() {
   STATUS=$(echo "$ITEM" | jq -r '.fieldValues.nodes[] | select(.field.name == "Status") | .name // ""' 2>/dev/null | head -1)
   PRIORITY=$(echo "$ITEM" | jq -r '.fieldValues.nodes[] | select(.field.name == "Priority") | .name // ""' 2>/dev/null | head -1)
   LEVEL=$(echo "$ITEM" | jq -r '.fieldValues.nodes[] | select(.field.name == "Level") | .name // ""' 2>/dev/null | head -1)
+}
+```
+
+**Repo mode:**
+
+```bash
+parse_item_repo() {
+  local ITEM="$1"
+  NUMBER=$(echo "$ITEM" | jq -r '.number')
+  TITLE=$(echo "$ITEM" | jq -r '.title')
+  STATUS_LABEL=$(echo "$ITEM" | jq -r '[.labels[].name | select(startswith("status:"))] | first // ""' | sed 's/^status://')
+  PRIORITY=$(echo "$ITEM" | jq -r '[.labels[].name | select(startswith("priority:"))] | first // ""' | sed 's/^priority://')
+  LEVEL=$(echo "$ITEM" | jq -r '[.labels[].name | select(startswith("level:"))] | first // ""' | sed 's/^level://')
+  STATUS=$(label_to_display "$STATUS_LABEL")
 }
 ```
 
@@ -216,7 +286,16 @@ parse_item() {
 | 1 | Done | low | L1 | Setup project |
 ```
 
-If there are no items, output: `No items in project.`
+If there are no items, output: `No items found.`
+
+In repo mode, if there are open issues without any `status:` label, show them in a separate section:
+
+```
+### Untracked Issues (no status label)
+| # | Title |
+|---|-------|
+| 15 | Some old issue |
+```
 
 ---
 
@@ -251,15 +330,19 @@ ISSUE_OUTPUT=$(gh issue create \
 NUMBER=$(echo "$ISSUE_OUTPUT" | grep -oP '(?<=/issues/)\d+')
 ```
 
-4. Resolve the issue node ID:
+4. **Branch by mode:**
+
+### Project mode (steps 4–8)
+
+4p. Resolve the issue node ID:
 
 ```bash
 ISSUE_NODE_ID=$(gh api /repos/$REPO/issues/$NUMBER --jq .node_id)
 ```
 
-5. Resolve `$PROJECT_ID` (see Shared section).
+5p. Resolve `$PROJECT_ID` (see Shared section).
 
-6. Add the issue to the project:
+6p. Add the issue to the project:
 
 ```bash
 ADD_RESPONSE=$(gh api graphql -f query='
@@ -274,7 +357,7 @@ mutation {
 ITEM_ID=$(echo "$ADD_RESPONSE" | jq -r '.data.addProjectV2ItemById.item.id')
 ```
 
-7. Resolve field and option IDs (see Shared section), then set Status=Todo, Priority, and Level:
+7p. Resolve field and option IDs (see Shared section), then set Status=Todo, Priority, and Level:
 
 ```bash
 # Set Status = Todo
@@ -294,7 +377,7 @@ mutation {
 # Set Level (resolve LEVEL_FIELD_ID and LEVEL_OPTION_ID similarly)
 ```
 
-8. If tags were provided, set the Tags text field:
+8p. If tags were provided, set the Tags text field:
 
 ```bash
 TAGS_FIELD_ID=$(echo "$FIELDS" | jq -r '.[] | select(.name == "Tags") | .id')
@@ -310,6 +393,19 @@ mutation {
   }
 }'
 ```
+
+### Repo mode (step 4r)
+
+4r. Add status, priority, and level labels to the issue:
+
+```bash
+# Convert priority/level to label values (already lowercase)
+gh issue edit $NUMBER --repo "$REPO" --add-label "status:todo,priority:$PRIORITY,level:$LEVEL"
+```
+
+No project ID, field ID, or option ID resolution needed.
+
+---
 
 9. Output:
 
@@ -347,8 +443,13 @@ Move an item to a new status, validating the transition against pipeline rules.
    Valid next: <comma-separated list of valid statuses>
    ```
 
-5. Resolve `$PROJECT_ID`, `$ITEM_ID`, and the target option ID.
-6. Update the Status field:
+5. **Branch by mode:**
+
+### Project mode
+
+5p. Resolve `$PROJECT_ID`, `$ITEM_ID`, and the target option ID.
+
+6p. Update the Status field:
 
 ```bash
 TARGET_OPTION_ID=$(echo "$FIELDS" | jq -r --arg s "$TARGET_STATUS" \
@@ -366,6 +467,19 @@ mutation {
   }
 }'
 ```
+
+### Repo mode
+
+5r. Convert current and target status to label format, then swap labels:
+
+```bash
+OLD_LABEL="status:$(display_to_label "$CURRENT_STATUS")"
+NEW_LABEL="status:$(display_to_label "$TARGET_STATUS")"
+
+gh issue edit $NUMBER --repo "$REPO" --remove-label "$OLD_LABEL" --add-label "$NEW_LABEL"
+```
+
+---
 
 7. Output:
 
@@ -426,9 +540,21 @@ CURRENT_TAGS=$(echo "$ITEM" | jq -r '.fieldValues.nodes[] | select(.field.name =
      ```bash
      gh issue edit $NUMBER --repo $REPO --body "$NEW_BODY"
      ```
-   - **priority changed:** resolve new option ID and call `updateProjectV2ItemFieldValue` for Priority field.
-   - **level changed:** resolve new option ID and call `updateProjectV2ItemFieldValue` for Level field.
-   - **tags changed:** call `updateProjectV2ItemFieldValue` for Tags field with `value: { text: "$NEW_TAGS" }`.
+   - **priority changed:**
+     - **Project mode:** resolve new option ID and call `updateProjectV2ItemFieldValue` for Priority field.
+     - **Repo mode:** swap priority labels:
+       ```bash
+       gh issue edit $NUMBER --repo "$REPO" --remove-label "priority:$OLD" --add-label "priority:$NEW"
+       ```
+   - **level changed:**
+     - **Project mode:** resolve new option ID and call `updateProjectV2ItemFieldValue` for Level field.
+     - **Repo mode:** swap level labels:
+       ```bash
+       gh issue edit $NUMBER --repo "$REPO" --remove-label "level:$OLD" --add-label "level:$NEW"
+       ```
+   - **tags changed:**
+     - **Project mode:** call `updateProjectV2ItemFieldValue` for Tags field with `value: { text: "$NEW_TAGS" }`.
+     - **Repo mode:** Tags remain as text in the issue body — no label change needed. If tags need storing, append them to the issue body.
 
 7. Output a summary of what changed:
 
@@ -450,8 +576,13 @@ Remove an item from the project and optionally close its issue.
 
 1. Load config, fetch all items.
 2. Resolve `<ID|name>` to an issue number and item node ID.
-3. Resolve `$PROJECT_ID`.
-4. Remove from project:
+3. **Branch by mode:**
+
+### Project mode
+
+3p. Resolve `$PROJECT_ID`.
+
+4p. Remove from project:
 
 ```bash
 gh api graphql -f query='
@@ -465,10 +596,23 @@ mutation {
 }'
 ```
 
+### Repo mode
+
+3r. Remove all kanban labels from the issue:
+
+```bash
+KANBAN_LABELS=$(gh issue view $NUMBER --repo "$REPO" --json labels --jq '[.labels[].name | select(startswith("status:") or startswith("priority:") or startswith("level:"))] | join(",")')
+if [ -n "$KANBAN_LABELS" ]; then
+  gh issue edit $NUMBER --repo "$REPO" --remove-label "$KANBAN_LABELS"
+fi
+```
+
+---
+
 5. Use AskUserQuestion:
 
    ```
-   #<NUMBER> has been removed from the project.
+   #<NUMBER> has been removed from tracking.
    Also close the GitHub issue? (y/n):
    ```
 
@@ -481,13 +625,13 @@ gh issue close $NUMBER --repo $REPO
 7. Output:
 
 ```
-✅ Removed #<NUMBER> from project
+✅ Removed #<NUMBER> from tracking
 ```
 
 Or if the issue was also closed:
 
 ```
-✅ Removed #<NUMBER> from project and closed issue
+✅ Removed #<NUMBER> from tracking and closed issue
 ```
 
 ---
@@ -500,6 +644,8 @@ Show a count of items by status.
 
 1. Load config, fetch all items.
 2. Count items by Status field value.
+   - **Project mode:** group by `fieldValues.nodes[] | select(.field.name == "Status") | .name`
+   - **Repo mode:** group by `status:` label value, converted to display name via `label_to_display`
 3. Render table in pipeline order (Todo first, Done last):
 
 ```
@@ -527,6 +673,8 @@ Show a human-readable pipeline state summary.
 
 1. Load config, fetch all items.
 2. Group items by Status field value.
+   - **Project mode:** group by `fieldValues.nodes[] | select(.field.name == "Status") | .name`
+   - **Repo mode:** group by `status:` label value, converted to display name via `label_to_display`
 3. Determine "Recently Done": items with Status=Done whose linked issue was closed within the last 3 days. Check closure date via:
 
 ```bash

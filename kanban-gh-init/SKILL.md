@@ -1,14 +1,14 @@
 ---
 name: kanban-gh-init
-description: "Connect to a GitHub Project, create pipeline fields, and write local config. Usage: /kanban-gh-init [project-url-or-number]"
+description: "Connect to a GitHub Project or repo, create pipeline fields/labels, and write local config. Usage: /kanban-gh-init [project-url-or-number|repo-url]"
 license: MIT
 ---
 
-> Shared context: read ~/.claude/skills/shared/schema.md for field names and config format. Read ~/.claude/skills/shared/graphql.md for GraphQL operations.
+> Shared context: read ~/.claude/skills/shared/schema.md for field names, config format, and label naming convention. Read ~/.claude/skills/shared/graphql.md for GraphQL operations and label operations.
 
 # kanban-gh-init
 
-Initialize a local kanban-gh workspace by connecting to a GitHub Project, creating required pipeline fields, and writing `.claude/kanban-gh.json`.
+Initialize a local kanban-gh workspace by connecting to a GitHub Project (project mode) or a GitHub repo (repo mode), creating required pipeline fields or labels, and writing `.claude/kanban-gh.json`.
 
 ---
 
@@ -32,14 +32,14 @@ Then exit. Do not proceed until auth succeeds.
 
 ## Step 2 — Parse argument
 
-The skill accepts an optional argument: a project URL or a bare project number.
+The skill accepts an optional argument: a project URL, a repo URL, or a bare project number.
 
-### Case A — URL provided
+### Case A — Project URL provided
 
 If the argument matches `https://github.com/users/<OWNER>/projects/<N>` or `https://github.com/orgs/<OWNER>/projects/<N>`:
 
 ```bash
-# Extract from URL
+INIT_MODE="project"
 OWNER=$(echo "$ARG" | sed -E 's|https://github.com/(users|orgs)/([^/]+)/projects/[0-9]+|\2|')
 PROJECT_NUMBER=$(echo "$ARG" | sed -E 's|.*/projects/([0-9]+)|\1|')
 ```
@@ -49,13 +49,29 @@ PROJECT_NUMBER=$(echo "$ARG" | sed -E 's|.*/projects/([0-9]+)|\1|')
 If the argument is a plain integer:
 
 ```bash
+INIT_MODE="project"
 PROJECT_NUMBER="$ARG"
 OWNER=$(gh repo view --json owner --jq '.owner.login')
 ```
 
 ### Case C — Nothing provided
 
-Run:
+Use AskUserQuestion:
+
+```
+How do you want to track tasks?
+  1. GitHub Project board (requires a Project)
+  2. Repo labels only (no Project needed)
+Enter 1 or 2:
+```
+
+If the user picks **1** (project mode):
+
+```bash
+INIT_MODE="project"
+```
+
+Then list projects and ask the user to choose:
 
 ```bash
 gh project list --owner @me --format json
@@ -72,6 +88,35 @@ Enter a number or paste a project URL:
 ```
 
 Once the user answers, extract `OWNER` and `PROJECT_NUMBER` from their selection.
+
+If the user picks **2** (repo mode):
+
+```bash
+INIT_MODE="repo"
+DEFAULT_REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
+```
+
+Use AskUserQuestion:
+
+```
+Which repo should tasks be tracked in?
+Default: <DEFAULT_REPO>
+Press Enter to accept the default, or type owner/repo:
+```
+
+Set `REPO` from the user's answer (or `DEFAULT_REPO` if empty). Then skip to **Step 5b — Repo Mode Init**.
+
+### Case D — Repo URL provided (no `/projects/` path)
+
+If the argument matches `https://github.com/<OWNER>/<REPO>` (with no `/projects/` segment):
+
+```bash
+INIT_MODE="repo"
+REPO=$(echo "$ARG" | sed -E 's|https://github.com/([^/]+/[^/]+).*|\1|')
+OWNER=$(echo "$REPO" | cut -d/ -f1)
+```
+
+Skip to **Step 5b — Repo Mode Init**.
 
 ---
 
@@ -341,6 +386,70 @@ Fields:
 
 ---
 
+## Step 5b — Repo Mode Init
+
+**This step applies only when `INIT_MODE="repo"`.** Skip Steps 3–6 entirely for repo mode.
+
+### Validate repo
+
+```bash
+gh repo view "$REPO" --json nameWithOwner --jq '.nameWithOwner'
+```
+
+If this fails, exit with:
+
+```
+Error: Could not find repo '<REPO>'. Check the URL and try again.
+```
+
+### Create labels
+
+Create all 13 labels (7 status + 3 priority + 3 level) using `gh label create --force` (see `shared/graphql.md` section 8 "Create Labels"). The `--force` flag makes this idempotent — existing labels with the same name get their color and description updated.
+
+```bash
+# Status labels
+gh label create "status:todo"         --color "0e8a16" --description "Not yet started"                    --repo "$REPO" --force
+gh label create "status:plan"         --color "0075ca" --description "Planning in progress"                --repo "$REPO" --force
+gh label create "status:plan-review"  --color "7057ff" --description "Plan awaiting review"                --repo "$REPO" --force
+gh label create "status:implement"    --color "e99695" --description "Implementation in progress"          --repo "$REPO" --force
+gh label create "status:impl-review"  --color "d876e3" --description "Implementation awaiting review"      --repo "$REPO" --force
+gh label create "status:test"         --color "fbca04" --description "Testing in progress"                 --repo "$REPO" --force
+gh label create "status:done"         --color "ededed" --description "Complete"                             --repo "$REPO" --force
+
+# Priority labels
+gh label create "priority:low"    --color "0e8a16" --description "Low priority"    --repo "$REPO" --force
+gh label create "priority:medium" --color "fbca04" --description "Medium priority" --repo "$REPO" --force
+gh label create "priority:high"   --color "d73a4a" --description "High priority"   --repo "$REPO" --force
+
+# Level labels
+gh label create "level:L1" --color "0e8a16" --description "Level 1 — Quick"    --repo "$REPO" --force
+gh label create "level:L2" --color "fbca04" --description "Level 2 — Standard" --repo "$REPO" --force
+gh label create "level:L3" --color "d73a4a" --description "Level 3 — Full"     --repo "$REPO" --force
+```
+
+Print label creation summary:
+
+```
+Labels:
+  status:todo         — ✓ created/updated
+  status:plan         — ✓ created/updated
+  status:plan-review  — ✓ created/updated
+  status:implement    — ✓ created/updated
+  status:impl-review  — ✓ created/updated
+  status:test         — ✓ created/updated
+  status:done         — ✓ created/updated
+  priority:low        — ✓ created/updated
+  priority:medium     — ✓ created/updated
+  priority:high       — ✓ created/updated
+  level:L1            — ✓ created/updated
+  level:L2            — ✓ created/updated
+  level:L3            — ✓ created/updated
+```
+
+After label creation, proceed to **Step 7** (check for existing config), then **Step 9b** (write repo-mode config).
+
+---
+
 ## Step 7 — Check for existing config
 
 Before writing the config, check if `.claude/kanban-gh.json` already exists:
@@ -371,7 +480,9 @@ Run /kanban-gh-init again to reconfigure.
 
 ---
 
-## Step 8 — Ask target repo
+## Step 8 — Ask target repo (project mode only)
+
+**Skip this step for repo mode** — `$REPO` was already set in Step 2 (Case C or D) or Step 5b.
 
 Get the default repo:
 
@@ -399,10 +510,13 @@ Create `.claude/` directory if it does not exist:
 mkdir -p .claude
 ```
 
+### Project mode config
+
 Write `.claude/kanban-gh.json` using the Write tool:
 
 ```json
 {
+  "mode": "project",
   "project": "<PROJECT_NUMBER>",
   "owner": "<OWNER>",
   "ownerType": "<user|organization>",
@@ -411,16 +525,31 @@ Write `.claude/kanban-gh.json` using the Write tool:
 }
 ```
 
+### Step 9b — Repo mode config
+
+Write `.claude/kanban-gh.json` using the Write tool:
+
+```json
+{
+  "mode": "repo",
+  "repo": "<OWNER/REPO>",
+  "owner": "<OWNER>",
+  "retries": 2
+}
+```
+
+Note: `project` and `ownerType` fields are omitted in repo mode — they are not needed.
+
 All values are strings except `retries` which is a number.
 
 ---
 
 ## Step 10 — Output confirmation
 
-Print:
+### Project mode
 
 ```
-✅ kanban-gh initialized.
+✅ kanban-gh initialized (project mode).
 
   Project: github.com/users/<OWNER>/projects/<PROJECT_NUMBER>
   Repo:    <OWNER>/<REPO>
@@ -430,3 +559,16 @@ Add tasks with /kanban-gh add <title>
 ```
 
 For org-owned projects, use `github.com/orgs/<OWNER>/projects/<PROJECT_NUMBER>` in the Project line.
+
+### Repo mode
+
+```
+✅ kanban-gh initialized (repo mode).
+
+  Repo:    <OWNER>/<REPO>
+  Mode:    labels (no Project board)
+  Labels:  13 created/updated
+  Config:  .claude/kanban-gh.json
+
+Add tasks with /kanban-gh add <title>
+```

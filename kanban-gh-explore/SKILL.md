@@ -1,14 +1,14 @@
 ---
 name: kanban-gh-explore
-description: "Explore the codebase for uncertain implementation direction. Produces a direction report and creates phased tasks in GitHub Projects. Usage: /kanban-gh-explore [topic]"
+description: "Explore the codebase for uncertain implementation direction. Produces a direction report and creates phased tasks. Works in both project and repo mode. Usage: /kanban-gh-explore [topic]"
 license: MIT
 ---
 
-> Shared context: read ~/.claude/skills/shared/schema.md for field names, status values, and config format. Read ~/.claude/skills/shared/graphql.md for GraphQL operations.
+> Shared context: read ~/.claude/skills/shared/schema.md for field names, status values, config format, and label naming convention. Read ~/.claude/skills/shared/graphql.md for GraphQL operations and label operations.
 
 # kanban-gh-explore
 
-Codebase exploration skill for uncertain implementation direction. Deeply explores the codebase, presents multiple implementation directions, and seeds the GitHub Project board with phased tasks. Does NOT write any source code.
+Codebase exploration skill for uncertain implementation direction. Deeply explores the codebase, presents multiple implementation directions, and seeds the kanban board with phased tasks. Does NOT write any source code. Works in both project mode (GitHub Projects v2) and repo mode (labels).
 
 ---
 
@@ -24,11 +24,15 @@ Every command begins by loading config from `.claude/kanban-gh.json`:
 
 ```bash
 CONFIG=$(cat .claude/kanban-gh.json 2>/dev/null)
-PROJECT=$(echo "$CONFIG" | jq -r '.project')
-OWNER=$(echo "$CONFIG" | jq -r '.owner')
-OWNER_TYPE=$(echo "$CONFIG" | jq -r '.ownerType')
+MODE=$(echo "$CONFIG" | jq -r '.mode // "project"')
 REPO=$(echo "$CONFIG" | jq -r '.repo')
+OWNER=$(echo "$CONFIG" | jq -r '.owner')
 RETRIES=$(echo "$CONFIG" | jq -r '.retries // 2')
+
+if [ "$MODE" = "project" ]; then
+  PROJECT=$(echo "$CONFIG" | jq -r '.project')
+  OWNER_TYPE=$(echo "$CONFIG" | jq -r '.ownerType')
+fi
 ```
 
 If the config file is missing, exit with:
@@ -192,7 +196,9 @@ REPORT_URL=$(gh issue create \
 REPORT_NUMBER=$(echo "$REPORT_URL" | grep -oE '[0-9]+$')
 ```
 
-Resolve the issue node ID and add it to the project:
+Resolve the issue and set fields (mode-aware):
+
+**Project mode:**
 
 ```bash
 ISSUE_NODE_ID=$(gh api /repos/$REPO/issues/$REPORT_NUMBER --jq .node_id)
@@ -220,6 +226,14 @@ Resolve field IDs via `getProjectFields`, then set:
 - **Tags** = `explore-report`
 
 Use `updateFieldValue` (see graphql.md) for each field.
+
+**Repo mode:**
+
+```bash
+gh issue edit $REPORT_NUMBER --repo "$REPO" --add-label "status:todo,level:L1,priority:low"
+```
+
+No project ID or field resolution needed. Tags (`explore-report`) remain in the issue body rather than as labels.
 
 Save `$REPORT_NUMBER` for use in subsequent steps.
 
@@ -264,7 +278,9 @@ BODY
 TASK_NUMBER=$(echo "$TASK_URL" | grep -oE '[0-9]+$')
 ```
 
-For each task, resolve its node ID, add to project, and set fields:
+For each task, set fields (mode-aware):
+
+**Project mode:**
 
 ```bash
 TASK_NODE_ID=$(gh api /repos/$REPO/issues/$TASK_NUMBER --jq .node_id)
@@ -275,6 +291,17 @@ Add to project via `addIssueToProject`, then set:
 - **Level** = `L3`
 - **Priority** = `high` / `medium` / `low` (by phase as above)
 - **Tags** = `phase:N, explore-<topic-slug>` (where topic-slug is the topic lowercased with spaces replaced by hyphens)
+
+Use `updateFieldValue` for each field.
+
+**Repo mode:**
+
+```bash
+# Set labels — priority varies by phase
+gh issue edit $TASK_NUMBER --repo "$REPO" --add-label "status:todo,level:L3,priority:$PHASE_PRIORITY"
+```
+
+Tags (`phase:N, explore-<topic-slug>`) are included in the issue body rather than as labels.
 
 Collect all created task numbers and titles into `$TASK_LIST` for use in step ⑦.
 

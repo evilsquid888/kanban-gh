@@ -1,14 +1,14 @@
 ---
 name: kanban-gh-refine
-description: "Refine backlog requirements through structured user interview. Updates the GitHub issue body with a clear specification. Usage: /kanban-gh-refine <ID|name>"
+description: "Refine backlog requirements through structured user interview. Updates the GitHub issue body with a clear specification. Works in both project and repo mode. Usage: /kanban-gh-refine <ID|name>"
 license: MIT
 ---
 
-> Shared context: read ~/.claude/skills/shared/schema.md for field names, status values, and config format. Read ~/.claude/skills/shared/graphql.md for GraphQL operations.
+> Shared context: read ~/.claude/skills/shared/schema.md for field names, status values, config format, and label naming convention. Read ~/.claude/skills/shared/graphql.md for GraphQL operations and label operations.
 
 # kanban-gh-refine
 
-Requirements refinement skill that guides you through a structured interview to clarify a backlog task, then updates the GitHub issue body with a clear specification.
+Requirements refinement skill that guides you through a structured interview to clarify a backlog task, then updates the GitHub issue body with a clear specification. Works in both project mode and repo mode.
 
 ---
 
@@ -24,11 +24,15 @@ Every command begins by loading config from `.claude/kanban-gh.json`:
 
 ```bash
 CONFIG=$(cat .claude/kanban-gh.json 2>/dev/null)
-PROJECT=$(echo "$CONFIG" | jq -r '.project')
-OWNER=$(echo "$CONFIG" | jq -r '.owner')
-OWNER_TYPE=$(echo "$CONFIG" | jq -r '.ownerType')
+MODE=$(echo "$CONFIG" | jq -r '.mode // "project"')
 REPO=$(echo "$CONFIG" | jq -r '.repo')
+OWNER=$(echo "$CONFIG" | jq -r '.owner')
 RETRIES=$(echo "$CONFIG" | jq -r '.retries // 2')
+
+if [ "$MODE" = "project" ]; then
+  PROJECT=$(echo "$CONFIG" | jq -r '.project')
+  OWNER_TYPE=$(echo "$CONFIG" | jq -r '.ownerType')
+fi
 ```
 
 If the config file is missing, exit with:
@@ -53,12 +57,21 @@ NUMBER=$(echo "$ARG" | sed 's/^#//')
 
 ### Partial title match
 
-If the argument is not numeric, treat it as a case-insensitive substring to match against item titles. Fetch all items via `getProjectItems` (see graphql.md), then filter:
+If the argument is not numeric, treat it as a case-insensitive substring to match against item titles.
+
+**Project mode:** Fetch all items via `getProjectItems` (see graphql.md), then filter:
 
 ```bash
 MATCHES=$(echo "$ITEMS" | jq --arg q "$ARG" '
   [.[] | select(.content.title | ascii_downcase | contains($q | ascii_downcase))]
 ')
+COUNT=$(echo "$MATCHES" | jq 'length')
+```
+
+**Repo mode:** Search issues directly:
+
+```bash
+MATCHES=$(gh issue list --repo "$REPO" --state open --search "$ARG" --json number,title,labels --limit 50)
 COUNT=$(echo "$MATCHES" | jq 'length')
 ```
 
@@ -211,7 +224,16 @@ And exit.
 gh issue edit $NUMBER --repo $REPO --body "$NEW_BODY"
 ```
 
-If the interview surfaced clear values for Priority, Level, or Tags that differ from current values, optionally update those project fields using `updateProjectV2ItemFieldValue` (see graphql.md for mutation patterns). Only do this if the values were explicitly discussed — do not infer or guess.
+If the interview surfaced clear values for Priority, Level, or Tags that differ from current values, optionally update those fields. Only do this if the values were explicitly discussed — do not infer or guess.
+
+- **Project mode:** use `updateProjectV2ItemFieldValue` (see graphql.md for mutation patterns).
+- **Repo mode:** swap labels:
+  ```bash
+  # Example: update priority
+  gh issue edit $NUMBER --repo "$REPO" --remove-label "priority:$OLD" --add-label "priority:$NEW"
+  # Example: update level
+  gh issue edit $NUMBER --repo "$REPO" --remove-label "level:$OLD" --add-label "level:$NEW"
+  ```
 
 ---
 

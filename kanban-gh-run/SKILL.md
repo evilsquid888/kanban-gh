@@ -1,14 +1,14 @@
 ---
 name: kanban-gh-run
-description: "Run the AI pipeline for GitHub Projects kanban tasks. Dispatches agents (Planner, Critic, Builder, Shield, Inspector, Ranger) using GitHub Issues for I/O. Usage: /kanban-gh-run <ID|name> [--auto] [--retries N] [--loop]"
+description: "Run the AI pipeline for kanban tasks. Dispatches agents (Planner, Critic, Builder, Shield, Inspector, Ranger) using GitHub Issues for I/O. Works in both project and repo mode. Usage: /kanban-gh-run <ID|name> [--auto] [--retries N] [--loop]"
 license: MIT
 ---
 
-> Shared context: read ~/.claude/skills/shared/schema.md, ~/.claude/skills/shared/graphql.md, and ~/.claude/skills/shared/pipeline.md for field definitions, GraphQL operations, pipeline levels, agent templates, and scoring rubrics.
+> Shared context: read ~/.claude/skills/shared/schema.md, ~/.claude/skills/shared/graphql.md, and ~/.claude/skills/shared/pipeline.md for field definitions, GraphQL/label operations, pipeline levels, agent templates, and scoring rubrics.
 
 # kanban-gh-run
 
-Pipeline orchestration skill that dispatches AI agents and manages pipeline transitions for GitHub Projects v2 tasks. Uses GitHub Issues as the I/O layer between agents.
+Pipeline orchestration skill that dispatches AI agents and manages pipeline transitions for kanban tasks. Uses GitHub Issues as the I/O layer between agents. Works in both project mode (GitHub Projects v2) and repo mode (labels).
 
 ---
 
@@ -24,11 +24,15 @@ Every command begins by loading config from `.claude/kanban-gh.json`:
 
 ```bash
 CONFIG=$(cat .claude/kanban-gh.json 2>/dev/null)
-PROJECT=$(echo "$CONFIG" | jq -r '.project')
-OWNER=$(echo "$CONFIG" | jq -r '.owner')
-OWNER_TYPE=$(echo "$CONFIG" | jq -r '.ownerType')
+MODE=$(echo "$CONFIG" | jq -r '.mode // "project"')
 REPO=$(echo "$CONFIG" | jq -r '.repo')
+OWNER=$(echo "$CONFIG" | jq -r '.owner')
 RETRIES=$(echo "$CONFIG" | jq -r '.retries // 2')
+
+if [ "$MODE" = "project" ]; then
+  PROJECT=$(echo "$CONFIG" | jq -r '.project')
+  OWNER_TYPE=$(echo "$CONFIG" | jq -r '.ownerType')
+fi
 ```
 
 If the config file is missing, exit with:
@@ -37,6 +41,8 @@ If the config file is missing, exit with:
 Error: .claude/kanban-gh.json not found. Run /kanban-gh-init first.
 ```
 
+All subsequent operations branch on `$MODE`. Status reads/writes use GraphQL in project mode and label swaps in repo mode. Agent dispatch is mode-agnostic — agents read/write via `gh issue view/comment` which works identically in both modes.
+
 ---
 
 ## ID Resolution
@@ -44,7 +50,10 @@ Error: .claude/kanban-gh.json not found. Run /kanban-gh-init first.
 Commands that accept `<ID|name>` resolve it identically to `/kanban-gh` — see that skill for the full procedure. In summary:
 
 - Plain integer or `#`-prefixed → use as issue number directly.
-- Non-numeric → case-insensitive substring match against item titles via `getProjectItems`. Zero matches → error. One match → use it. Multiple matches → list them and prompt (or error in `--auto` mode).
+- Non-numeric:
+  - **Project mode:** case-insensitive substring match against item titles via `getProjectItems`.
+  - **Repo mode:** search via `gh issue list --search "$ARG"`.
+  - Zero matches → error. One match → use it. Multiple matches → list them and prompt (or error in `--auto` mode).
 
 ---
 
@@ -59,7 +68,9 @@ Full pipeline run for a single task. Default behavior: pause at review steps for
 **Steps:**
 
 1. Load config.
-2. Resolve `<ID|name>` to an issue number, item node ID, and current field values (Status, Level).
+2. Resolve `<ID|name>` to an issue number and current field values (Status, Level).
+   - **Project mode:** also resolve item node ID. Read Status/Level from `getProjectItems` field values.
+   - **Repo mode:** read Status/Level from issue labels (parse `status:` and `level:` labels).
 3. Determine the pipeline level from the Level field (`L1`, `L2`, or `L3`).
 4. Parse `--auto` and `--retries N` flags.
 5. Execute the orchestration loop (see Orchestration Loop below) from the current status forward.
@@ -74,7 +85,7 @@ Execute only the next pipeline step for a task, then exit. Does not loop or cont
 **Steps:**
 
 1. Load config.
-2. Resolve `<ID|name>` to issue number, item node ID, current Status and Level.
+2. Resolve `<ID|name>` to issue number, current Status and Level (plus item node ID in project mode).
 3. Determine the next agent to dispatch based on current Status and Level (see Agent Dispatch Table).
 4. Execute the Agent Dispatch Procedure for that single agent.
 5. Apply the resulting status transition.
@@ -157,7 +168,9 @@ For every agent dispatch, follow these steps:
 ```
 ① Read task:
    - Issue data: gh issue view $NUMBER --repo $REPO --json title,body,comments
-   - Field values: fetch from getProjectItems, filter by issue number
+   - Field values:
+     - Project mode: fetch from getProjectItems, filter by issue number
+     - Repo mode: parse from issue labels (status:, level:, priority:)
    - Determine current status and level
 
 ② Read agent template from ~/.claude/skills/shared/pipeline.md
@@ -216,9 +229,16 @@ fi
 
 ### Status Transitions After Agent Completion
 
+All status updates below use mode-aware writes:
+
+- **Project mode:** `updateFieldValue` via GraphQL (see `shared/graphql.md`).
+- **Repo mode:** swap labels via `gh issue edit --remove-label "status:$OLD" --add-label "status:$NEW"` (see `shared/graphql.md` section 10).
+
+Convert display names to label values using `display_to_label` (see `shared/schema.md`) when in repo mode.
+
 **After Planner completes** (L2/L3 only — Planner is skipped for L1):
-- L2: Update Status → `Implement` via `updateFieldValue`.
-- L3: Update Status → `Plan Review` via `updateFieldValue`.
+- L2: Update Status → `Implement`.
+- L3: Update Status → `Plan Review`.
 
 **After Critic completes:**
 - Parse verdict from comment: `approved` or `changes_requested`.
@@ -226,7 +246,7 @@ fi
 - `changes_requested`: Update Status → `Plan`. Re-dispatch Planner (subject to retry limit).
 
 **After Builder + Shield complete** (both run at `Implement` status):
-- Update Status → `Impl Review` via `updateFieldValue`.
+- Update Status → `Impl Review`.
 
 **After Inspector completes:**
 - Parse verdict: `approved` or `changes_requested`.
@@ -312,7 +332,7 @@ Rejection count resets to 0 when the agent posts an `approved` or `pass` verdict
 ## `--loop` Mode
 
 ```
-Fetch all items with Status = "Todo" via getProjectItems + filter
+Fetch all items with Status = "Todo"
 Sort by issue number ascending
 For each:
   Run full pipeline (/kanban-gh-run <number> [--auto] [--retries N])
@@ -322,6 +342,8 @@ For each:
 
 ### Fetching Todo Items
 
+**Project mode:**
+
 ```bash
 # After fetching all items via getProjectItems
 TODO_ITEMS=$(echo "$ITEMS" | jq '[
@@ -330,6 +352,13 @@ TODO_ITEMS=$(echo "$ITEMS" | jq '[
     select(.field.name == "Status") | .name == "Todo"
   )
 ] | sort_by(.content.number)')
+```
+
+**Repo mode:**
+
+```bash
+# Fetch Todo issues directly by label
+TODO_ITEMS=$(gh issue list --repo "$REPO" --state open --label "status:todo" --json number,title,labels --limit 100 | jq 'sort_by(.number)')
 ```
 
 ### Loop Output
@@ -366,7 +395,12 @@ if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
 fi
 COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "no-git")
 
-# 2. Update Status to Done via GraphQL updateFieldValue
+# 2. Update Status to Done (mode-aware)
+```
+
+**Project mode:**
+
+```bash
 DONE_OPTION_ID=$(echo "$FIELDS" | jq -r '.[] | select(.name == "Status") | .options[] | select(.name == "Done") | .id')
 gh api graphql -f query='
 mutation {
@@ -379,7 +413,22 @@ mutation {
     projectV2Item { id }
   }
 }'
+```
 
+**Repo mode:**
+
+```bash
+# Get current status label
+OLD_STATUS_LABEL=$(gh issue view $NUMBER --repo "$REPO" --json labels --jq '[.labels[].name | select(startswith("status:"))] | first // ""')
+# Swap to done
+if [ -n "$OLD_STATUS_LABEL" ]; then
+  gh issue edit $NUMBER --repo "$REPO" --remove-label "$OLD_STATUS_LABEL" --add-label "status:done"
+else
+  gh issue edit $NUMBER --repo "$REPO" --add-label "status:done"
+fi
+```
+
+```bash
 # 3. Post final comment
 gh issue comment $NUMBER --repo $REPO --body "> ✅ Pipeline complete. All done-when criteria met.
 > Commit: $COMMIT_HASH"
