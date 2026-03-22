@@ -109,6 +109,7 @@ Use `$ISSUE_REPO` (resolved per-issue) instead of `$REPO` for all per-issue `gh`
 
 | Value | Description |
 |-------|-------------|
+| `Backlog` | Parked for later |
 | `Todo` | Not yet started |
 | `Plan` | Planning in progress |
 | `Plan Review` | Plan awaiting review |
@@ -147,7 +148,7 @@ In repo mode, project field values are represented as GitHub labels on each issu
 
 | Field | Label prefix | Examples |
 |-------|-------------|----------|
-| Status | `status:` | `status:todo`, `status:plan`, `status:plan-review`, `status:implement`, `status:impl-review`, `status:test`, `status:done` |
+| Status | `status:` | `status:backlog`, `status:todo`, `status:plan`, `status:plan-review`, `status:implement`, `status:impl-review`, `status:test`, `status:done` |
 | Priority | `priority:` | `priority:low`, `priority:medium`, `priority:high` |
 | Level | `level:` | `level:L1`, `level:L2`, `level:L3` |
 
@@ -159,6 +160,7 @@ Bidirectional mapping between label values and display names:
 
 | Label value | Display name |
 |-------------|-------------|
+| `backlog` | `Backlog` |
 | `todo` | `Todo` |
 | `plan` | `Plan` |
 | `plan-review` | `Plan Review` |
@@ -171,6 +173,7 @@ Bidirectional mapping between label values and display names:
 
 | Label | Color hex | Description |
 |-------|-----------|-------------|
+| `status:backlog` | `c5def5` | Parked for later |
 | `status:todo` | `0e8a16` | Not yet started |
 | `status:plan` | `0075ca` | Planning in progress |
 | `status:plan-review` | `7057ff` | Plan awaiting review |
@@ -199,6 +202,7 @@ LEVEL=$(echo "$LABELS" | jq -r '[.[].name | select(startswith("level:"))] | firs
 ```bash
 label_to_display() {
   case "$1" in
+    backlog) echo "Backlog" ;;
     todo) echo "Todo" ;;
     plan) echo "Plan" ;;
     plan-review) echo "Plan Review" ;;
@@ -212,6 +216,7 @@ label_to_display() {
 
 display_to_label() {
   case "$1" in
+    Backlog) echo "backlog" ;;
     Todo) echo "todo" ;;
     Plan) echo "plan" ;;
     "Plan Review") echo "plan-review" ;;
