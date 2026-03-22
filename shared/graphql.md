@@ -230,7 +230,7 @@ mutation($projectId: ID!) {
 
 ### 3b. `updateField`
 
-Update an existing single-select field's options. Use this when a field already exists but has the wrong options (e.g., the default `Status` field on a new GitHub Project has `Todo`, `In Progress`, `Done` — we need to replace these with our 7-column pipeline statuses).
+Update an existing single-select field's options. Use this when a field already exists but has the wrong options (e.g., the default `Status` field on a new GitHub Project has `Todo`, `In Progress`, `Done` — we need to replace these with our 8-column pipeline statuses).
 
 **Important:** `updateProjectV2Field` takes `fieldId` only — NOT `projectId`.
 
@@ -260,6 +260,7 @@ mutation($fieldId: ID!) {
   updateProjectV2Field(input: {
     fieldId: $fieldId
     singleSelectOptions: [
+      {name: "Backlog", color: BLUE, description: "Parked for later"},
       {name: "Todo", color: GREEN, description: "Not yet started"},
       {name: "Plan", color: BLUE, description: "Planning in progress"},
       {name: "Plan Review", color: PURPLE, description: "Plan awaiting review"},
