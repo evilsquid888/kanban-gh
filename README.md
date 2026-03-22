@@ -45,22 +45,25 @@ No `pnpm install`. No server. No `start.sh`.
 
 ## Commands Reference
 
-| Command | Description |
-|---------|-------------|
-| `/kanban-gh-init [url]` | Connect to a GitHub Project |
-| `/kanban-gh list` | View board |
-| `/kanban-gh add <title>` | Create task |
-| `/kanban-gh move <ID\|name> <status>` | Move task |
-| `/kanban-gh edit <ID\|name>` | Edit task |
-| `/kanban-gh remove <ID\|name>` | Remove task |
-| `/kanban-gh stats` | Task statistics |
-| `/kanban-gh context` | Pipeline state summary |
-| `/kanban-gh-run <ID\|name> [--auto]` | Run AI pipeline |
-| `/kanban-gh-run step <ID\|name>` | Run single pipeline step |
-| `/kanban-gh-run --loop [--auto]` | Process all todo items |
-| `/kanban-gh-run review <ID\|name>` | Trigger code review |
-| `/kanban-gh-refine <ID\|name>` | Refine requirements |
-| `/kanban-gh-explore [topic]` | Explore codebase, seed tasks |
+| Command | Flags / Arguments | Description |
+|---------|-------------------|-------------|
+| `/kanban-gh-init` | `[url\|number]` | Connect to a GitHub Project |
+| `/kanban-gh list` | | View board |
+| `/kanban-gh add` | `<title>` | Create task |
+| `/kanban-gh move` | `<ID\|name> <status>` | Move task |
+| `/kanban-gh edit` | `<ID\|name>` | Edit task |
+| `/kanban-gh remove` | `<ID\|name>` | Remove task |
+| `/kanban-gh stats` | | Task statistics |
+| `/kanban-gh context` | | Pipeline state summary |
+| `/kanban-gh-run` | `<ID\|name> [--auto] [--retries N]` | Run full AI pipeline |
+| `/kanban-gh-run step` | `<ID\|name>` | Run single pipeline step |
+| `/kanban-gh-run --loop` | `[--auto] [--retries N]` | Process all Todo items |
+| `/kanban-gh-run review` | `<ID\|name>` | Trigger code review |
+| `/kanban-gh-refine` | `<ID\|name>` | Refine requirements |
+| `/kanban-gh-explore` | `[topic]` | Explore codebase, seed tasks |
+
+- `--auto` — skip review pauses, apply agent verdicts automatically
+- `--retries N` — max rejections before pausing (default: 2)
 
 ---
 
