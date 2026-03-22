@@ -470,13 +470,20 @@ mutation {
 
 ### Repo mode
 
-5r. Convert current and target status to label format, then swap labels:
+5r. Resolve per-issue repo (see `shared/schema.md` Multi-Repo Resolution), then convert current and target status to label format and swap labels:
 
 ```bash
+ISSUE_URL=$(echo "$ITEM" | jq -r '.url // ""')
+if [ -n "$ISSUE_URL" ] && [ "$ISSUE_URL" != "null" ]; then
+  ISSUE_REPO=$(echo "$ISSUE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/issues/[0-9]+|\1|')
+else
+  ISSUE_REPO="$REPO"
+fi
+
 OLD_LABEL="status:$(display_to_label "$CURRENT_STATUS")"
 NEW_LABEL="status:$(display_to_label "$TARGET_STATUS")"
 
-gh issue edit $NUMBER --repo "$REPO" --remove-label "$OLD_LABEL" --add-label "$NEW_LABEL"
+gh issue edit $NUMBER --repo "$ISSUE_REPO" --remove-label "$OLD_LABEL" --add-label "$NEW_LABEL"
 ```
 
 ---
@@ -497,11 +504,23 @@ Edit fields on an existing task.
 
 1. Load config, fetch all items.
 2. Resolve `<ID|name>` to an issue number and item node ID.
-3. Fetch current values:
+3. Resolve the per-issue repo (see `shared/schema.md` Multi-Repo Resolution):
+
+```bash
+# Project mode: URL is in content.url; Repo mode: URL is in .url
+ISSUE_URL=$(echo "$ITEM" | jq -r '.content.url // .url // ""')
+if [ -n "$ISSUE_URL" ] && [ "$ISSUE_URL" != "null" ]; then
+  ISSUE_REPO=$(echo "$ISSUE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/issues/[0-9]+|\1|')
+else
+  ISSUE_REPO="$REPO"
+fi
+```
+
+4. Fetch current values:
 
 ```bash
 # Issue body and title
-ISSUE_DATA=$(gh issue view $NUMBER --repo $REPO --json title,body)
+ISSUE_DATA=$(gh issue view $NUMBER --repo $ISSUE_REPO --json title,body)
 CURRENT_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title')
 CURRENT_BODY=$(echo "$ISSUE_DATA" | jq -r '.body')
 
@@ -534,23 +553,23 @@ CURRENT_TAGS=$(echo "$ITEM" | jq -r '.fieldValues.nodes[] | select(.field.name =
 
    - **title changed:**
      ```bash
-     gh issue edit $NUMBER --repo $REPO --title "$NEW_TITLE"
+     gh issue edit $NUMBER --repo $ISSUE_REPO --title "$NEW_TITLE"
      ```
    - **description changed:**
      ```bash
-     gh issue edit $NUMBER --repo $REPO --body "$NEW_BODY"
+     gh issue edit $NUMBER --repo $ISSUE_REPO --body "$NEW_BODY"
      ```
    - **priority changed:**
      - **Project mode:** resolve new option ID and call `updateProjectV2ItemFieldValue` for Priority field.
      - **Repo mode:** swap priority labels:
        ```bash
-       gh issue edit $NUMBER --repo "$REPO" --remove-label "priority:$OLD" --add-label "priority:$NEW"
+       gh issue edit $NUMBER --repo "$ISSUE_REPO" --remove-label "priority:$OLD" --add-label "priority:$NEW"
        ```
    - **level changed:**
      - **Project mode:** resolve new option ID and call `updateProjectV2ItemFieldValue` for Level field.
      - **Repo mode:** swap level labels:
        ```bash
-       gh issue edit $NUMBER --repo "$REPO" --remove-label "level:$OLD" --add-label "level:$NEW"
+       gh issue edit $NUMBER --repo "$ISSUE_REPO" --remove-label "level:$OLD" --add-label "level:$NEW"
        ```
    - **tags changed:**
      - **Project mode:** call `updateProjectV2ItemFieldValue` for Tags field with `value: { text: "$NEW_TAGS" }`.
@@ -598,12 +617,19 @@ mutation {
 
 ### Repo mode
 
-3r. Remove all kanban labels from the issue:
+3r. Resolve per-issue repo (see `shared/schema.md` Multi-Repo Resolution), then remove all kanban labels from the issue:
 
 ```bash
-KANBAN_LABELS=$(gh issue view $NUMBER --repo "$REPO" --json labels --jq '[.labels[].name | select(startswith("status:") or startswith("priority:") or startswith("level:"))] | join(",")')
+ISSUE_URL=$(echo "$ITEM" | jq -r '.url // ""')
+if [ -n "$ISSUE_URL" ] && [ "$ISSUE_URL" != "null" ]; then
+  ISSUE_REPO=$(echo "$ISSUE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/issues/[0-9]+|\1|')
+else
+  ISSUE_REPO="$REPO"
+fi
+
+KANBAN_LABELS=$(gh issue view $NUMBER --repo "$ISSUE_REPO" --json labels --jq '[.labels[].name | select(startswith("status:") or startswith("priority:") or startswith("level:"))] | join(",")')
 if [ -n "$KANBAN_LABELS" ]; then
-  gh issue edit $NUMBER --repo "$REPO" --remove-label "$KANBAN_LABELS"
+  gh issue edit $NUMBER --repo "$ISSUE_REPO" --remove-label "$KANBAN_LABELS"
 fi
 ```
 
@@ -619,7 +645,7 @@ fi
 6. If yes:
 
 ```bash
-gh issue close $NUMBER --repo $REPO
+gh issue close $NUMBER --repo $ISSUE_REPO
 ```
 
 7. Output:
@@ -675,10 +701,18 @@ Show a human-readable pipeline state summary.
 2. Group items by Status field value.
    - **Project mode:** group by `fieldValues.nodes[] | select(.field.name == "Status") | .name`
    - **Repo mode:** group by `status:` label value, converted to display name via `label_to_display`
-3. Determine "Recently Done": items with Status=Done whose linked issue was closed within the last 3 days. Check closure date via:
+3. Determine "Recently Done": items with Status=Done whose linked issue was closed within the last 3 days. Resolve per-issue repo first (see `shared/schema.md` Multi-Repo Resolution), then check closure date:
 
 ```bash
-CLOSED_AT=$(gh issue view $NUMBER --repo $REPO --json closedAt --jq '.closedAt')
+# Resolve ISSUE_REPO from item URL (content.url in project mode, .url in repo mode)
+ISSUE_URL=$(echo "$ITEM" | jq -r '.content.url // .url // ""')
+if [ -n "$ISSUE_URL" ] && [ "$ISSUE_URL" != "null" ]; then
+  ISSUE_REPO=$(echo "$ISSUE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/issues/[0-9]+|\1|')
+else
+  ISSUE_REPO="$REPO"
+fi
+
+CLOSED_AT=$(gh issue view $NUMBER --repo $ISSUE_REPO --json closedAt --jq '.closedAt')
 ```
 
 If `closedAt` is within 3 days of now, include in "Recently Done".

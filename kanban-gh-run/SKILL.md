@@ -167,7 +167,11 @@ For every agent dispatch, follow these steps:
 
 ```
 ① Read task:
-   - Issue data: gh issue view $NUMBER --repo $REPO --json title,body,comments
+   - Resolve ISSUE_REPO from the item's URL (see shared/schema.md Multi-Repo Resolution):
+     - Project mode: content.url → extract owner/repo
+     - Repo mode: .url → extract owner/repo
+     - Fallback: use config $REPO if URL is missing
+   - Issue data: gh issue view $NUMBER --repo $ISSUE_REPO --json title,body,comments
    - Field values:
      - Project mode: fetch from getProjectItems, filter by issue number
      - Repo mode: parse from issue labels (status:, level:, priority:)
@@ -177,7 +181,7 @@ For every agent dispatch, follow these steps:
    (find the section for the appropriate agent)
 
 ③ Fill placeholders with actual data:
-   $NUMBER, $REPO, $OWNER, $PROJECT_ID
+   $NUMBER, $ISSUE_REPO, $OWNER, $PROJECT_ID
    Previous agent comments: parse from issue comments using jq
    (find by signature header, e.g. "> **Planner**" to get the plan)
 
@@ -191,7 +195,7 @@ For every agent dispatch, follow these steps:
 ### Reading Previous Agent Comments
 
 ```bash
-COMMENTS=$(gh issue view $NUMBER --repo $REPO --json comments --jq '.comments')
+COMMENTS=$(gh issue view $NUMBER --repo $ISSUE_REPO --json comments --jq '.comments')
 
 # Find most recent comment by agent signature
 PLAN=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Planner**"))] | last | .body')
@@ -207,7 +211,7 @@ TEST_RESULTS=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **R
 After each agent completes, verify the comment was posted:
 
 ```bash
-LATEST=$(gh issue view $NUMBER --repo $REPO --json comments --jq '.comments | last | .body')
+LATEST=$(gh issue view $NUMBER --repo $ISSUE_REPO --json comments --jq '.comments | last | .body')
 if ! echo "$LATEST" | grep -q '> \*\*'"$AGENT_NICKNAME"'\*\*'; then
   echo "Error: $AGENT_NICKNAME did not post a comment on #$NUMBER"
   exit 1
@@ -419,18 +423,18 @@ mutation {
 
 ```bash
 # Get current status label
-OLD_STATUS_LABEL=$(gh issue view $NUMBER --repo "$REPO" --json labels --jq '[.labels[].name | select(startswith("status:"))] | first // ""')
+OLD_STATUS_LABEL=$(gh issue view $NUMBER --repo "$ISSUE_REPO" --json labels --jq '[.labels[].name | select(startswith("status:"))] | first // ""')
 # Swap to done
 if [ -n "$OLD_STATUS_LABEL" ]; then
-  gh issue edit $NUMBER --repo "$REPO" --remove-label "$OLD_STATUS_LABEL" --add-label "status:done"
+  gh issue edit $NUMBER --repo "$ISSUE_REPO" --remove-label "$OLD_STATUS_LABEL" --add-label "status:done"
 else
-  gh issue edit $NUMBER --repo "$REPO" --add-label "status:done"
+  gh issue edit $NUMBER --repo "$ISSUE_REPO" --add-label "status:done"
 fi
 ```
 
 ```bash
 # 3. Post final comment
-gh issue comment $NUMBER --repo $REPO --body "> ✅ Pipeline complete. All done-when criteria met.
+gh issue comment $NUMBER --repo $ISSUE_REPO --body "> ✅ Pipeline complete. All done-when criteria met.
 > Commit: $COMMIT_HASH"
 ```
 

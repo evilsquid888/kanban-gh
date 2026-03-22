@@ -75,7 +75,7 @@ How agents read and write via GitHub Issues:
 | `Ranger` | Builder comment + Shield comment | Issue comment (test results) | `gh issue comment` |
 | `Refiner` | Issue body | Rewrites issue body with structured spec | `gh issue edit` |
 
-**Reading previous agent comments:** Agents fetch all comments via `gh issue view <NUMBER> --repo <REPO> --json comments` and identify relevant ones by signature header (e.g., find the comment starting with `> **Planner**` to read the plan). See Section 5 for parsing snippets.
+**Reading previous agent comments:** Agents fetch all comments via `gh issue view <NUMBER> --repo <ISSUE_REPO> --json comments` and identify relevant ones by signature header (e.g., find the comment starting with `> **Planner**` to read the plan). `$ISSUE_REPO` is resolved per-issue from the item's URL (see `shared/schema.md` Multi-Repo Resolution); it falls back to config `$REPO` if the URL is missing. See Section 5 for parsing snippets.
 
 ---
 
@@ -87,7 +87,7 @@ Every agent comment begins with the signature header defined in `shared/schema.m
 > **[Nickname]** `[model]` · [ISO 8601 timestamp]Z
 ```
 
-Status updates use the `updateFieldValue` mutation from `shared/graphql.md`. The orchestrator resolves `$PROJECT_ID`, `$ITEM_ID`, `$FIELD_ID`, and `$OPTION_ID` before invoking each agent and passes them as environment variables.
+Status updates use the `updateFieldValue` mutation from `shared/graphql.md`. The orchestrator resolves `$PROJECT_ID`, `$ITEM_ID`, `$FIELD_ID`, `$OPTION_ID`, and `$ISSUE_REPO` before invoking each agent and passes them as environment variables. `$ISSUE_REPO` is resolved from the item's URL (see `shared/schema.md` Multi-Repo Resolution).
 
 ---
 
@@ -99,7 +99,7 @@ Status updates use the `updateFieldValue` mutation from `shared/graphql.md`. The
 
 ```bash
 # Issue body (the task description)
-BODY=$(gh issue view $NUMBER --repo $REPO --json body --jq '.body')
+BODY=$(gh issue view $NUMBER --repo $ISSUE_REPO --json body --jq '.body')
 ```
 
 **Guidelines:**
@@ -134,7 +134,7 @@ BODY=$(gh issue view $NUMBER --repo $REPO --json body --jq '.body')
 **Writes:**
 
 ```bash
-gh issue comment $NUMBER --repo $REPO --body "$PLANNER_OUTPUT"
+gh issue comment $NUMBER --repo $ISSUE_REPO --body "$PLANNER_OUTPUT"
 ```
 
 **Status update:**
@@ -151,10 +151,10 @@ gh issue comment $NUMBER --repo $REPO --body "$PLANNER_OUTPUT"
 
 ```bash
 # Issue body
-BODY=$(gh issue view $NUMBER --repo $REPO --json body --jq '.body')
+BODY=$(gh issue view $NUMBER --repo $ISSUE_REPO --json body --jq '.body')
 
 # Planner's comment (find by signature header)
-COMMENTS=$(gh issue view $NUMBER --repo $REPO --json comments --jq '.comments')
+COMMENTS=$(gh issue view $NUMBER --repo $ISSUE_REPO --json comments --jq '.comments')
 PLAN=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Planner**"))] | last | .body')
 ```
 
@@ -191,7 +191,7 @@ PLAN=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Planner**
 **Writes:**
 
 ```bash
-gh issue comment $NUMBER --repo $REPO --body "$CRITIC_OUTPUT"
+gh issue comment $NUMBER --repo $ISSUE_REPO --body "$CRITIC_OUTPUT"
 ```
 
 **Status update:**
@@ -209,10 +209,10 @@ gh issue comment $NUMBER --repo $REPO --body "$CRITIC_OUTPUT"
 
 ```bash
 # Issue body
-BODY=$(gh issue view $NUMBER --repo $REPO --json body --jq '.body')
+BODY=$(gh issue view $NUMBER --repo $ISSUE_REPO --json body --jq '.body')
 
 # Planner's comment
-COMMENTS=$(gh issue view $NUMBER --repo $REPO --json comments --jq '.comments')
+COMMENTS=$(gh issue view $NUMBER --repo $ISSUE_REPO --json comments --jq '.comments')
 PLAN=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Planner**"))] | last | .body')
 
 # Critic's comment (if L3 pipeline)
@@ -253,7 +253,7 @@ REVIEW=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Critic*
 **Writes:**
 
 ```bash
-gh issue comment $NUMBER --repo $REPO --body "$BUILDER_OUTPUT"
+gh issue comment $NUMBER --repo $ISSUE_REPO --body "$BUILDER_OUTPUT"
 ```
 
 **Status update:**
@@ -270,10 +270,10 @@ gh issue comment $NUMBER --repo $REPO --body "$BUILDER_OUTPUT"
 
 ```bash
 # Issue body
-BODY=$(gh issue view $NUMBER --repo $REPO --json body --jq '.body')
+BODY=$(gh issue view $NUMBER --repo $ISSUE_REPO --json body --jq '.body')
 
 # Builder's comment (find by signature header)
-COMMENTS=$(gh issue view $NUMBER --repo $REPO --json comments --jq '.comments')
+COMMENTS=$(gh issue view $NUMBER --repo $ISSUE_REPO --json comments --jq '.comments')
 IMPL=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Builder**"))] | last | .body')
 ```
 
@@ -305,7 +305,7 @@ IMPL=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Builder**
 **Writes:**
 
 ```bash
-gh issue comment $NUMBER --repo $REPO --body "$SHIELD_OUTPUT"
+gh issue comment $NUMBER --repo $ISSUE_REPO --body "$SHIELD_OUTPUT"
 ```
 
 **Status update:**
@@ -322,10 +322,10 @@ gh issue comment $NUMBER --repo $REPO --body "$SHIELD_OUTPUT"
 
 ```bash
 # Issue body
-BODY=$(gh issue view $NUMBER --repo $REPO --json body --jq '.body')
+BODY=$(gh issue view $NUMBER --repo $ISSUE_REPO --json body --jq '.body')
 
 # Planner's comment
-COMMENTS=$(gh issue view $NUMBER --repo $REPO --json comments --jq '.comments')
+COMMENTS=$(gh issue view $NUMBER --repo $ISSUE_REPO --json comments --jq '.comments')
 PLAN=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Planner**"))] | last | .body')
 
 # Builder's comment
@@ -376,7 +376,7 @@ TESTS=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Shield**
 **Writes:**
 
 ```bash
-gh issue comment $NUMBER --repo $REPO --body "$INSPECTOR_OUTPUT"
+gh issue comment $NUMBER --repo $ISSUE_REPO --body "$INSPECTOR_OUTPUT"
 ```
 
 **Status update:**
@@ -394,7 +394,7 @@ gh issue comment $NUMBER --repo $REPO --body "$INSPECTOR_OUTPUT"
 
 ```bash
 # Builder's comment
-COMMENTS=$(gh issue view $NUMBER --repo $REPO --json comments --jq '.comments')
+COMMENTS=$(gh issue view $NUMBER --repo $ISSUE_REPO --json comments --jq '.comments')
 IMPL=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Builder**"))] | last | .body')
 
 # Shield's comment
@@ -431,7 +431,7 @@ TESTS=$(echo "$COMMENTS" | jq -r '[.[] | select(.body | startswith("> **Shield**
 **Writes:**
 
 ```bash
-gh issue comment $NUMBER --repo $REPO --body "$RANGER_OUTPUT"
+gh issue comment $NUMBER --repo $ISSUE_REPO --body "$RANGER_OUTPUT"
 ```
 
 **Status update:**
@@ -481,7 +481,7 @@ Agents identify previous agent outputs by their signature header (`> **AgentName
 ### Fetch all comments
 
 ```bash
-COMMENTS=$(gh issue view $NUMBER --repo $REPO --json comments --jq '.comments')
+COMMENTS=$(gh issue view $NUMBER --repo $ISSUE_REPO --json comments --jq '.comments')
 ```
 
 ### Find most recent comment by agent

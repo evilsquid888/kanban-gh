@@ -100,17 +100,31 @@ Resolve the `<ID|name>` argument to an issue number using the ID Resolution rule
 
 ---
 
-### ② Read Issue
+### ② Resolve Per-Issue Repo
+
+Resolve `$ISSUE_REPO` from the item's URL (see `shared/schema.md` Multi-Repo Resolution):
 
 ```bash
-ISSUE_DATA=$(gh issue view $NUMBER --repo $REPO --json title,body)
+# Project mode: URL is in content.url; Repo mode: URL is in .url
+ISSUE_URL=$(echo "$ITEM" | jq -r '.content.url // .url // ""')
+if [ -n "$ISSUE_URL" ] && [ "$ISSUE_URL" != "null" ]; then
+  ISSUE_REPO=$(echo "$ISSUE_URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/issues/[0-9]+|\1|')
+else
+  ISSUE_REPO="$REPO"
+fi
+```
+
+### ③ Read Issue
+
+```bash
+ISSUE_DATA=$(gh issue view $NUMBER --repo $ISSUE_REPO --json title,body)
 TITLE=$(echo "$ISSUE_DATA" | jq -r '.title')
 BODY=$(echo "$ISSUE_DATA" | jq -r '.body')
 ```
 
 ---
 
-### ③ Display Current State
+### ④ Display Current State
 
 Output:
 
@@ -122,7 +136,7 @@ Then show the current body. If `$BODY` is empty or null, show `(no description)`
 
 ---
 
-### ④ Identify Gaps
+### ⑤ Identify Gaps
 
 Before interviewing the user, internally assess which of the following dimensions are missing or unclear in the current body:
 
@@ -138,7 +152,7 @@ Use this gap analysis to form targeted questions in the next step.
 
 ---
 
-### ⑤ Interview User (MANDATORY)
+### ⑥ Interview User (MANDATORY)
 
 Run up to 3 rounds of questions using AskUserQuestion. Each round:
 
@@ -161,7 +175,7 @@ Adapt subsequent rounds based on answers received. Do not re-ask questions that 
 
 ---
 
-### ⑥ Synthesize Refined Description
+### ⑦ Synthesize Refined Description
 
 Using the answers collected, produce a structured description using this template:
 
@@ -191,7 +205,7 @@ Omit any section that has no content based on the interview.
 
 ---
 
-### ⑦ Present to User
+### ⑧ Present to User
 
 Display the full refined description, then use AskUserQuestion:
 
@@ -206,7 +220,7 @@ What would you like to do?
   cancel   — discard changes
 ```
 
-If the user chooses **edit**, return to step ⑤ for another round of questions (up to the 3-round limit). If the round limit is reached and the user still wants to edit, allow one final freeform edit pass before presenting again.
+If the user chooses **edit**, return to step ⑥ for another round of questions (up to the 3-round limit). If the round limit is reached and the user still wants to edit, allow one final freeform edit pass before presenting again.
 
 If the user chooses **cancel**, output:
 
@@ -218,10 +232,10 @@ And exit.
 
 ---
 
-### ⑧ Save on Approve
+### ⑨ Save on Approve
 
 ```bash
-gh issue edit $NUMBER --repo $REPO --body "$NEW_BODY"
+gh issue edit $NUMBER --repo $ISSUE_REPO --body "$NEW_BODY"
 ```
 
 If the interview surfaced clear values for Priority, Level, or Tags that differ from current values, optionally update those fields. Only do this if the values were explicitly discussed — do not infer or guess.
@@ -230,24 +244,24 @@ If the interview surfaced clear values for Priority, Level, or Tags that differ 
 - **Repo mode:** swap labels:
   ```bash
   # Example: update priority
-  gh issue edit $NUMBER --repo "$REPO" --remove-label "priority:$OLD" --add-label "priority:$NEW"
+  gh issue edit $NUMBER --repo "$ISSUE_REPO" --remove-label "priority:$OLD" --add-label "priority:$NEW"
   # Example: update level
-  gh issue edit $NUMBER --repo "$REPO" --remove-label "level:$OLD" --add-label "level:$NEW"
+  gh issue edit $NUMBER --repo "$ISSUE_REPO" --remove-label "level:$OLD" --add-label "level:$NEW"
   ```
 
 ---
 
-### ⑨ Post Agent Log Comment
+### ⑩ Post Agent Log Comment
 
 ```bash
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-gh issue comment $NUMBER --repo $REPO --body "> **Refiner** \`sonnet\` · $TIMESTAMP
+gh issue comment $NUMBER --repo $ISSUE_REPO --body "> **Refiner** \`sonnet\` · $TIMESTAMP
 > Requirements refined. Updated issue body with structured spec."
 ```
 
 ---
 
-### ⑩ Confirm
+### ⑪ Confirm
 
 Output:
 

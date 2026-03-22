@@ -14,7 +14,8 @@ GitHub Projects v2 requires node IDs (opaque base64 strings) rather than human-r
 | `$FIELD_ID` | Returned by `getProjectFields` |
 | `$OPTION_ID` | Returned by `getProjectFields` (nested inside each field's `options`) |
 | `$ITEM_ID` | Returned by `getProjectItems` |
-| `$ISSUE_NODE_ID` | `gh api /repos/{owner}/{repo}/issues/{number} --jq .node_id` |
+| `$ISSUE_NODE_ID` | `gh api /repos/{owner}/{repo}/issues/{number} --jq .node_id` — use `$ISSUE_REPO` (resolved from item URL) instead of config `$REPO` for per-issue lookups |
+| `$ISSUE_REPO` | Resolved per-issue from item URL via `resolve_repo_from_url` (see `shared/schema.md`); falls back to config `$REPO` |
 
 Typical resolution order for a write operation:
 

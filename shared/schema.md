@@ -64,6 +64,43 @@ fi
 
 If the `mode` field is absent from the config, treat it as `"project"`. All existing project-mode configs continue to work without modification.
 
+### Multi-Repo Resolution
+
+In **project mode**, a GitHub Project can track issues from multiple repos. Each item's `content.url` contains the actual repo (e.g., `https://github.com/owner/frontend/issues/42`). For all per-issue operations (view, comment, edit, close), resolve the repo from the item's URL rather than using the config `$REPO`.
+
+In **repo mode**, all issues come from the config repo, so `$ISSUE_REPO` always equals `$REPO`.
+
+**Helper function:**
+
+```bash
+resolve_repo_from_url() {
+  # Extract "owner/repo" from a GitHub issue URL
+  # Input:  https://github.com/owner/repo/issues/42
+  # Output: owner/repo
+  local URL="$1"
+  echo "$URL" | sed -E 's|https://github.com/([^/]+/[^/]+)/issues/[0-9]+|\1|'
+}
+```
+
+**Per-issue repo resolution pattern:**
+
+```bash
+# Project mode: URL is in content.url
+ISSUE_URL=$(echo "$ITEM" | jq -r '.content.url // ""')
+
+# Repo mode: URL is in .url
+ISSUE_URL=$(echo "$ITEM" | jq -r '.url // ""')
+
+# Resolve repo, fall back to config $REPO
+if [ -n "$ISSUE_URL" ] && [ "$ISSUE_URL" != "null" ]; then
+  ISSUE_REPO=$(resolve_repo_from_url "$ISSUE_URL")
+else
+  ISSUE_REPO="$REPO"
+fi
+```
+
+Use `$ISSUE_REPO` (resolved per-issue) instead of `$REPO` for all per-issue `gh` commands. Keep config `$REPO` for creating new issues (`/kanban-gh add`, `/kanban-gh-explore`).
+
 ---
 
 ## GitHub Project Field Definitions
