@@ -1,12 +1,13 @@
 # kanban-gh
 
-Turn GitHub Projects into an autonomous dev pipeline powered by Claude Code.
+Turn GitHub Issues into an autonomous dev pipeline powered by Claude Code.
 
-Write a task title. Six AI agents plan it, build it, review the code, and run the tests — all tracked on a real GitHub Project board. No database, no server, minimal setup — just `gh` CLI and a few copied skill files.
+Point it at a repo or a Project board. Six AI agents plan it, build it, review the code, and run the tests. No database, no server, minimal setup — just `gh` CLI and a few copied skill files.
 
+- **Two modes** — track tasks on a GitHub Project board, or directly with repo issue labels
 - **Fully autonomous pipeline** — plan, implement, review, and test without manual handoffs
 - **Seven specialized agents** — Planner, Critic, Builder, Shield, Inspector, Ranger, Refiner
-- **GitHub Projects as the single source of truth** — no extra infrastructure
+- **Multi-repo support** — one board can track issues across multiple repos
 - **Three pipeline levels** — from quick config fixes (L1) to full-feature builds (L3)
 - **Just slash commands** — runs as Claude Code skills, nothing else to install
 
@@ -41,9 +42,19 @@ No `pnpm install`. No server. No `start.sh`.
 
 ## Quick Start
 
+**With a GitHub Project board:**
+
 ```
 /kanban-gh-init https://github.com/users/your-username/projects/1
 /kanban-gh add Implement user authentication
+/kanban-gh-run 1
+```
+
+**With repo issues only (no Project board needed):**
+
+```
+/kanban-gh-init https://github.com/your-username/your-repo
+/kanban-gh add Fix login redirect bug
 /kanban-gh-run 1
 ```
 
@@ -53,7 +64,7 @@ No `pnpm install`. No server. No `start.sh`.
 
 | Command | Flags / Arguments | Description |
 |---------|-------------------|-------------|
-| `/kanban-gh-init` | `[url\|number]` | Connect to a GitHub Project |
+| `/kanban-gh-init` | `[url\|number]` | Connect to a GitHub Project or repo |
 | `/kanban-gh list` | | View board |
 | `/kanban-gh add` | `<title>` | Create task |
 | `/kanban-gh move` | `<ID\|name> <status>` | Move task |
@@ -104,8 +115,10 @@ Todo → Plan → Plan Review → Implement → Impl Review → Test → Done
 ## Architecture
 
 ```
-Claude Code Skills → gh CLI → GitHub Projects v2 GraphQL API
-                   → gh CLI → GitHub Issues (comments)
+                  ┌→ GitHub Projects v2 GraphQL API  (project mode)
+Claude Code Skills → gh CLI ─┤
+                  └→ GitHub Issues + Labels          (repo mode)
+                   → gh CLI → GitHub Issues (comments, both modes)
 ```
 
 No local database. No web server. GitHub IS the board.
